@@ -1,17 +1,18 @@
 /**
  * Cryptographic enclave: every browser-side key operation for E2EE, the AI
  * handoff vault and the encrypted ledger. Imported ONLY by crypto.worker.ts —
- * keys, Master Key entropy and handoff plaintext never exist on the UI thread.
+ * derived/private keys never leave the worker. Recovery words and WebAuthn
+ * output necessarily pass through the browser UI and are not XSS-isolated.
  *
  * Memory discipline: each typed array holding a raw secret or plaintext is
- * wiped (random fill, then zeros) in a `finally` as soon as its operation ends.
- * Held state (vault plaintext, pending Master Key, ledger keys) has a TTL.
+ * zero-filled in a `finally` as soon as its operation ends. Pending master
+ * keys are non-extractable; vault configuration is held only as ciphertext.
  */
 import { b64u, isSealedBlob, type SealedBlob } from "@/lib/e2ee/crypto";
 import { masterKeyFromMnemonic, newMasterKey } from "@/lib/e2ee/recovery";
-import { loadDeviceKey, saveDeviceKey, workspaceKeyFromMaster } from "@/lib/e2ee/device-key";
+import { loadDeviceKey, saveDeviceKey, workspaceKeyFromMaster, type WorkspaceKey } from "@/lib/e2ee/device-key";
 import { decryptLedgerEvent, generateLedgerKeys, unlockLedgerKey } from "@/lib/ledger/crypto";
-import { wipe } from "@/lib/crypto/wipe";
+import { wipe, wipeMessage } from "@/lib/crypto/wipe";
 import {
   VAULT_TTL_MINUTES,
   isEphemeralSecret,
@@ -25,7 +26,7 @@ import {
 import { isStreamId, issueCapability } from "@/lib/protocol/capabilities";
 import { didOfSecretKey, newIdentityKey } from "@/lib/protocol/did-key";
 import { createDpopProof } from "@/lib/protocol/dpop";
-import { signEvent, verifyEvent } from "@/lib/protocol/events";
+import { signEvent, verifyEvent, verifyChain } from "@/lib/protocol/events";
 import { eventAad, identityAad, loadIdentity, saveIdentity } from "@/lib/protocol/identity-store";
 import type { EnclaveErrorCode, EnclaveOp, EnclaveOps } from "./protocol";
 
@@ -46,22 +47,22 @@ const fail = (code: EnclaveErrorCode): never => {
 
 const newHandle = () => b64u.encode(crypto.getRandomValues(new Uint8Array(16)));
 const str = (v: unknown, max = 4096): string => (typeof v === "string" && v.length <= max ? v : fail("invalid_input"));
-const bytes = (v: unknown): Uint8Array => (v instanceof Uint8Array ? v : fail("invalid_input"));
+const bytes = (v: unknown): Uint8Array =>
+  v instanceof Uint8Array && v.buffer instanceof ArrayBuffer ? v : fail("invalid_input");
 
 // ---- Held state (all of it wiped on discard / expiry) ----------------------
 
-type VaultSlot = { key: CryptoKey; plaintext: Uint8Array | null; timer: ReturnType<typeof setTimeout> };
+type VaultSlot = { key: CryptoKey; sealedConfig: SealedBlob | null; expiresAt: number; timer: ReturnType<typeof setTimeout> };
 const vaults = new Map<string, VaultSlot>();
-const pendingMasters = new Map<string, { entropy: Uint8Array; timer: ReturnType<typeof setTimeout> }>();
-const pendingLedger = new Map<string, { key: CryptoKey; timer: ReturnType<typeof setTimeout> }>();
+const pendingMasters = new Map<string, { value: WorkspaceKey; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
+const pendingLedger = new Map<string, { key: CryptoKey; expiresAt: number; timer: ReturnType<typeof setTimeout> }>();
 const ledgerKeys = new Map<string, CryptoKey>();
 
 function discardVault(handle: string) {
   const slot = vaults.get(handle);
   if (!slot) return;
   clearTimeout(slot.timer);
-  wipe(slot.plaintext);
-  slot.plaintext = null;
+  slot.sealedConfig = null;
   vaults.delete(handle);
 }
 
@@ -69,7 +70,6 @@ function discardMaster(handle: string) {
   const p = pendingMasters.get(handle);
   if (!p) return;
   clearTimeout(p.timer);
-  wipe(p.entropy);
   pendingMasters.delete(handle);
 }
 
@@ -111,17 +111,17 @@ async function deviceKeyFor(userId: string) {
 async function withIdentity<T>(userId: string, fn: (sk: Uint8Array, did: string) => Promise<T>): Promise<T> {
   const dk = await deviceKeyFor(userId);
   let stored = await loadIdentity(userId);
-  let sk: Uint8Array;
-  if (!stored) {
-    const fresh = newIdentityKey();
-    sk = fresh.secretKey;
-    stored = { did: fresh.did, keyId: dk.keyId, sealedSecret: await sealBytes(dk.key, sk, identityAad(userId, fresh.did)) };
-    await saveIdentity(userId, stored);
-  } else {
-    if (stored.keyId !== dk.keyId) fail("decrypt_failed");
-    sk = await openBytes(dk.key, stored.sealedSecret, identityAad(userId, stored.did));
-  }
+  let sk: Uint8Array | null = null;
   try {
+    if (!stored) {
+      const fresh = newIdentityKey();
+      sk = fresh.secretKey;
+      stored = { did: fresh.did, keyId: dk.keyId, sealedSecret: await sealBytes(dk.key, sk, identityAad(userId, fresh.did)) };
+      await saveIdentity(userId, stored);
+    } else {
+      if (stored.keyId !== dk.keyId) fail("decrypt_failed");
+      sk = await openBytes(dk.key, stored.sealedSecret, identityAad(userId, stored.did));
+    }
     if (sk.length !== 32 || didOfSecretKey(sk) !== stored.did) fail("decrypt_failed");
     return await fn(sk, stored.did);
   } finally {
@@ -149,13 +149,19 @@ export const handlers: Handlers = {
     const base = await vaultHkdfBase(secret); // wipes the decoded secret bytes
     const [claimProof, key] = await Promise.all([vaultClaimProofFrom(base), vaultEncryptionKeyFrom(base)]);
     const handle = newHandle();
-    vaults.set(handle, { key, plaintext: null, timer: setTimeout(() => discardVault(handle), VAULT_TTL_MINUTES * MINUTE) });
+    vaults.set(handle, { key, sealedConfig: null, expiresAt: Date.now() + VAULT_TTL_MINUTES * MINUTE, timer: setTimeout(() => discardVault(handle), VAULT_TTL_MINUTES * MINUTE) });
     return { handle, claimProof };
   },
 
   async "vault.decrypt"({ handle, vaultId, blob, expiresAt }) {
     const slot = vaults.get(str(handle)) ?? fail("unknown_handle");
+    const expiry = Date.parse(str(expiresAt, 64));
+    if (!Number.isFinite(expiry) || expiry <= Date.now() || slot.expiresAt <= Date.now()) {
+      discardVault(handle);
+      fail("unknown_handle");
+    }
     const pt = await openBytes(slot.key, str(blob, 65536), vaultAad(str(vaultId, 64)));
+    let normalized: Uint8Array | null = null;
     try {
       let raw: unknown;
       try {
@@ -165,28 +171,30 @@ export const handlers: Handlers = {
       }
       const parsed = vaultConfigSchema.safeParse(raw);
       if (!parsed.success) return fail("invalid_config");
-      wipe(slot.plaintext);
-      slot.plaintext = enc.encode(JSON.stringify(parsed.data));
-      const ttl = Date.parse(str(expiresAt, 64)) - Date.now();
-      if (Number.isFinite(ttl)) {
-        clearTimeout(slot.timer);
-        slot.timer = setTimeout(() => discardVault(handle), Math.max(0, Math.min(ttl, VAULT_TTL_MINUTES * MINUTE)));
-      }
+      normalized = enc.encode(JSON.stringify(parsed.data));
+      slot.sealedConfig = await sealBytes(slot.key, normalized, `rout.enclave.pending.v1:${handle}`);
+      slot.expiresAt = Math.min(expiry, slot.expiresAt);
+      clearTimeout(slot.timer);
+      slot.timer = setTimeout(() => discardVault(handle), Math.max(0, slot.expiresAt - Date.now()));
       const { name, slug, description } = parsed.data;
       return { name, ...(slug ? { slug } : {}), ...(description ? { description } : {}) };
     } finally {
-      wipe(pt);
+      wipe(pt, normalized);
     }
   },
 
   async "vault.reseal"({ handle, userId }) {
     const slot = vaults.get(str(handle)) ?? fail("unknown_handle");
-    if (!slot.plaintext) fail("invalid_input");
-    const dk = await deviceKeyFor(userId);
+    let plaintext: Uint8Array | null = null;
     try {
-      return { encrypted: await sealBytes(dk.key, slot.plaintext as Uint8Array, workspaceConfigAad(userId)), keyId: dk.keyId };
+      if (slot.expiresAt <= Date.now()) fail("unknown_handle");
+      if (!slot.sealedConfig) fail("invalid_input");
+      const dk = await deviceKeyFor(userId);
+      plaintext = await openBytes(slot.key, slot.sealedConfig, `rout.enclave.pending.v1:${handle}`);
+      return { encrypted: await sealBytes(dk.key, plaintext, workspaceConfigAad(userId)), keyId: dk.keyId };
     } finally {
-      discardVault(handle); // plaintext is wiped the moment the ciphertext exists
+      wipe(plaintext);
+      discardVault(handle);
     }
   },
 
@@ -202,16 +210,22 @@ export const handlers: Handlers = {
 
   async "masterKey.generate"() {
     const { key, mnemonic } = newMasterKey();
-    const handle = newHandle();
-    pendingMasters.set(handle, { entropy: key, timer: setTimeout(() => discardMaster(handle), PENDING_TTL) });
-    return { handle, mnemonic };
+    try {
+      const value = await workspaceKeyFromMaster(key);
+      const handle = newHandle();
+      pendingMasters.set(handle, { value, expiresAt: Date.now() + PENDING_TTL, timer: setTimeout(() => discardMaster(handle), PENDING_TTL) });
+      return { handle, mnemonic };
+    } finally {
+      wipe(key);
+    }
   },
 
   async "masterKey.commitPending"({ handle, userId }) {
     const p = pendingMasters.get(str(handle)) ?? fail("unknown_handle");
-    clearTimeout(p.timer);
-    pendingMasters.delete(handle);
-    return storeMaster(str(userId, 200), p.entropy);
+    discardMaster(handle);
+    if (p.expiresAt <= Date.now()) fail("unknown_handle");
+    await saveDeviceKey(str(userId, 200), p.value);
+    return { keyId: p.value.keyId };
   },
 
   async "masterKey.discardPending"({ handle }) {
@@ -226,7 +240,7 @@ export const handlers: Handlers = {
     } catch {
       return fail("invalid_mnemonic");
     }
-    return storeMaster(str(userId, 200), entropy);
+    return storeMaster(userId, entropy);
   },
 
   async "data.seal"({ userId, aad, plaintext }) {
@@ -249,7 +263,7 @@ export const handlers: Handlers = {
     try {
       const { privateKey, ...draft } = await generateLedgerKeys(prfBytes);
       discardLedgerDraft(draft.keyId);
-      pendingLedger.set(draft.keyId, { key: privateKey, timer: setTimeout(() => discardLedgerDraft(draft.keyId), PENDING_TTL) });
+      pendingLedger.set(draft.keyId, { key: privateKey, expiresAt: Date.now() + PENDING_TTL, timer: setTimeout(() => discardLedgerDraft(draft.keyId), PENDING_TTL) });
       return draft;
     } finally {
       wipe(prfBytes);
@@ -259,6 +273,7 @@ export const handlers: Handlers = {
   async "ledger.activate"({ keyId }) {
     const p = pendingLedger.get(str(keyId)) ?? fail("unknown_handle");
     discardLedgerDraft(keyId);
+    if (p.expiresAt <= Date.now()) fail("unknown_handle");
     ledgerKeys.clear(); // one unlocked ledger key at a time
     ledgerKeys.set(keyId, p.key);
     return null;
@@ -366,6 +381,11 @@ export const handlers: Handlers = {
     });
   },
 
+  async "protocol.verifyChain"({ events }) {
+    if (!Array.isArray(events)) fail("invalid_input");
+    return verifyChain(events);
+  },
+
   async "hash.sha256Hex"({ text }) {
     const input = enc.encode(str(text, 4096));
     try {
@@ -384,10 +404,13 @@ export function isEnclaveOp(op: unknown): op is EnclaveOp {
 /** Runs one request; never leaks error messages (they could contain data), only codes. */
 export async function runEnclaveOp(op: EnclaveOp, args: unknown): Promise<{ ok: true; result: unknown } | { ok: false; code: EnclaveErrorCode }> {
   try {
+    if (!isEnclaveOp(op)) fail("invalid_input");
     if (typeof args !== "object" || args === null) fail("invalid_input");
     const result = await (handlers[op] as (a: unknown) => Promise<unknown>)(args);
     return { ok: true, result };
   } catch (e) {
     return { ok: false, code: e instanceof EnclaveFailure ? e.code : "internal" };
+  } finally {
+    wipeMessage(args);
   }
 }
