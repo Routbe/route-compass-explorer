@@ -22,7 +22,10 @@ import { DevModeToggle } from "@/components/DevModeToggle";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/hooks/useTheme";
-import { DEFAULT_INTERFACE_THEME, isInternalInterface } from "@/lib/internal-interface-theme";
+import { BOOT_SCRIPT, DEFAULT_UI_PREFERENCES, isInternalInterface } from "@/lib/internal-interface-theme";
+import { readRequestUiPreferences } from "@/lib/ui-preferences-request";
+import { UiPreferencesSeed, useUiPreferences } from "@/hooks/useUiPreferences";
+import { UiPreferenceAccountSync } from "@/components/settings/UiPreferenceAccountSync";
 import { useMatches } from "@tanstack/react-router";
 import { I18nProvider } from "@/lib/i18n";
 import { AuthProvider } from "@/hooks/useAuth";
@@ -118,10 +121,11 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   // Same split-brain decision as the server middleware, so client navigation obeys it too.
-  beforeLoad: ({ location }) => {
+  beforeLoad: async ({ location }) => {
     const d = modeDecision(appMode(), location.pathname);
     if (d.kind === "notFound") throw notFound();
     if (d.kind === "redirect") throw redirect({ href: d.to });
+    return { uiPreferences: await readRequestUiPreferences() };
   },
   head: () => ({
     meta: [
@@ -177,11 +181,25 @@ function RootShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: state => state.location.pathname });
   const routeIds = useMatches({ select: matches => matches.map(match => match.routeId) });
   const internalUi = isInternalInterface(pathname, routeIds);
+  const seed = Route.useRouteContext({ select: context => context.uiPreferences }) ?? DEFAULT_UI_PREFERENCES;
   return (
-    // Het thema-effect (useTheme) zet na hydratie class/colorScheme op <html>;
-    // suppressHydrationWarning voorkomt een loze React-waarschuwing daarover.
-    <html lang="en" data-workspace-ui={internalUi ? "internal" : undefined} data-theme={internalUi ? DEFAULT_INTERFACE_THEME : undefined} suppressHydrationWarning>
+    <UiPreferencesSeed.Provider value={seed}>
+      <DocumentShell internalUi={internalUi}>{children}</DocumentShell>
+    </UiPreferencesSeed.Provider>
+  );
+}
+
+/**
+ * Server HTML already carries the cookie-mirrored material and explicit colour
+ * mode; BOOT_SCRIPT corrects device-only or system choices before first paint.
+ */
+function DocumentShell({ internalUi, children }: { internalUi: boolean; children: ReactNode }) {
+  const { material, mode } = useUiPreferences();
+  return (
+    <html lang="en" className={mode === "dark" ? "dark" : undefined} data-workspace-ui={internalUi ? "internal" : undefined}
+      data-theme={internalUi ? material : undefined} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }} />
         <BrandedHeadContent />
         {/* After the route tags, so a page accent colour (no media) still wins. */}
         <meta name="theme-color" content="#FAFAFA" media="(prefers-color-scheme: light)" />
@@ -219,6 +237,7 @@ function RootComponent() {
             <StepUpDialog />
             <AuthProvider>
               <LanguageSync />
+              <UiPreferenceAccountSync />
               <ErrorBoundary>
                   {/* Required: nested routes render here. */}
                   <ShellSwitch>
