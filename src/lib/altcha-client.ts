@@ -26,15 +26,27 @@ function solveInWorker(ch: Challenge): Promise<number | null> {
       reject(err);
       return;
     }
+    const timer = setTimeout(() => {
+      worker.terminate();
+      reject(new Error("altcha_worker_timeout"));
+    }, 120_000);
     worker.onmessage = (e: MessageEvent<{ number: number | null }>) => {
+      clearTimeout(timer);
       worker.terminate();
       resolve(e.data.number);
     };
-    worker.onerror = (e) => {
+    worker.onerror = worker.onmessageerror = () => {
+      clearTimeout(timer);
       worker.terminate();
-      reject(e);
+      reject(new Error("altcha_worker_unavailable"));
     };
-    worker.postMessage({ challenge: ch.challenge, salt: ch.salt, maxnumber: ch.maxnumber });
+    try {
+      worker.postMessage({ challenge: ch.challenge, salt: ch.salt, maxnumber: ch.maxnumber });
+    } catch {
+      clearTimeout(timer);
+      worker.terminate();
+      reject(new Error("altcha_worker_unavailable"));
+    }
   });
 }
 

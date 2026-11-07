@@ -115,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authClient.signOut();
     } catch {
-      /* the cookie is cleared server-side; a network hiccup must not trap the user */
+      /* Local state is locked; a failed request does not prove server-cookie clearance. */
     }
     try {
       // Eigen sessiekoekje (Bluesky-aanmelding) apart wissen.
