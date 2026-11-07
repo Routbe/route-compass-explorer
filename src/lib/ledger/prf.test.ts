@@ -46,4 +46,16 @@ describe("passkey secret ownership", () => {
     expect(mocked.generate).not.toHaveBeenCalled();
     expect([...output]).toEqual(Array(32).fill(0));
   });
+  it("does not unlock after the caller locks while WebAuthn is pending", async () => {
+    const output = new Uint8Array(32).fill(92);
+    let current = true;
+    const caller = { signal: new AbortController().signal, assertCurrent: () => { if (!current) throw new Error("locked"); } };
+    vi.stubGlobal("navigator", { credentials: { get: async () => {
+      current = false;
+      return { rawId: new Uint8Array([1]).buffer, getClientExtensionResults: () => ({ prf: { results: { first: output.buffer } } }) };
+    } } });
+    await expect(unlockLedgerWithPasskey("key", { v: 1, source: "prf", salt: "", iv: "", ciphertext: "" }, undefined, caller)).rejects.toThrow("locked");
+    expect(mocked.unlock).not.toHaveBeenCalled();
+    expect([...output]).toEqual(Array(32).fill(0));
+  });
 });

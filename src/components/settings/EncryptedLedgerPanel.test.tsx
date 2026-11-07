@@ -10,6 +10,7 @@ vi.mock("@/lib/crypto-enclave/client", async (original) => ({
   enclave: { ledger: { unlock: mock.unlock, decrypt: mock.decrypt, lock: mock.lock, generate: mock.generate, discardPending: mock.discard, activate: mock.activate } },
 }));
 import { EncryptedLedgerPanel } from "./EncryptedLedgerPanel";
+import { EnclaveError, terminateEnclave } from "@/lib/crypto-enclave/client";
 
 describe("ledger plaintext lifecycle", () => {
   beforeEach(() => {
@@ -40,5 +41,13 @@ describe("ledger plaintext lifecycle", () => {
     await act(async () => { resolve?.({ keyId: "late-key", publicKey: {}, envelopes: [], recoveryCode: "recovery" }); });
     expect(mock.discard).toHaveBeenCalledWith("late-key");
     expect(mock.activate).not.toHaveBeenCalled();
+  });
+  it("shows a worker failure and re-enables controls rather than remaining stuck busy", async () => {
+    mock.generate.mockImplementationOnce(async () => { terminateEnclave("timeout"); throw new EnclaveError("timeout"); });
+    render(<EncryptedLedgerPanel />);
+    const button = await screen.findByRole("button", { name: "Nieuwe logboeksleutel" });
+    fireEvent.click(button);
+    await screen.findByRole("alert");
+    await waitFor(() => expect(button).toBeEnabled());
   });
 });

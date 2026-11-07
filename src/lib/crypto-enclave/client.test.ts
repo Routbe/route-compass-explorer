@@ -110,4 +110,12 @@ describe("enclave message ownership", () => {
     expect(fresh.signal.aborted).toBe(false);
     expect(fresh.assertCurrent).not.toThrow();
   });
+  it("does not create a replacement worker for cleanup after termination", async () => {
+    terminateEnclave();
+    FakeWorker.current = null;
+    await enclave.ledger.lock();
+    await enclave.vault.discard("old-handle");
+    await enclave.masterKey.discardPending("old-master");
+    expect(FakeWorker.current).toBeNull();
+  });
 });
