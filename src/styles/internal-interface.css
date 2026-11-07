@@ -4,6 +4,7 @@
   --interface-corner: 2px;
   --interface-ink: oklch(0 0 0);
   --interface-block-shadow: var(--interface-offset) var(--interface-offset) 0px var(--interface-ink);
+  --interface-color-spectrum: conic-gradient(from 0deg, oklch(0.63 0.25 29), oklch(0.97 0.21 110), oklch(0.87 0.29 142), oklch(0.9 0.15 195), oklch(0.45 0.31 264), oklch(0.7 0.32 328), oklch(0.63 0.25 29));
 }
 :root[data-workspace-ui="internal"][data-theme="sovereign"] {
   --interface-edge: hsl(var(--foreground) / 0.65);
