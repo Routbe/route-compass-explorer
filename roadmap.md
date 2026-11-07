@@ -33,3 +33,9 @@
 
 - [ ] Original account and private-data flows: Neon is linked and its runtime role checks pass; original signing keys, account configuration, and authenticated end-to-end checks remain required.
 - [ ] Payment, email, OAuth, storage, and scheduled services: require provider configuration and end-to-end checks.
+
+## Current request: Stealth Brutalism landing page
+
+- [ ] Scope crisp borders, hard 4px shadows and mechanical action states to the public gateway only.
+- [ ] Preserve the monospace terminal, ROUT typography, page content and existing navigation.
+- [ ] Verify computed shadows/filters, active displacement and desktop/mobile layout in Chromium.
