@@ -101,7 +101,7 @@ export function MobileMenu({ className }: { className?: string }) {
           <Section title={t("menu.infrastructure")} items={INFRASTRUCTURE} onNavigate={() => setOpen(false)} />
 
           {internalUi && <div className="space-y-2 border-t border-border pt-3">
-            <p className="eyebrow px-3">Aanpassen</p>
+            <p className="eyebrow px-3">Weergave</p>
             <InterfaceThemeSwitcher />
           </div>}
 

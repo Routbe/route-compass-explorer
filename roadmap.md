@@ -52,3 +52,12 @@
 - [x] Add internal-only Sovereign (default) and Creator material variables, root attributes and persisted, live Settings/Aanpassen controls; artwork excluded.
 - [x] Verify original globe and blur, QR workflow/download, exact 4px press, no internal diffuse effects, Creator persistence and 1280/810/390px layouts in Chromium; policy/lifecycle/auth/Wallet tests and automatic build pass.
 - [ ] Verify signed-in Command Center, profile Studio, Analytics and Settings with real account data: blocked by original ROUT account/signing configuration; public QR Studio and its actual theme controls verified.
+## Current request: Mechanical Elegance + Glass engine (approved plan, 7 Nov 2026)
+
+- [x] Reproduce loading jump: stored material and colour mode applied only after hydration (seconds in dev).
+- [ ] Preferences known before first paint (cookie for server render + head boot script); no attribute removal on re-render.
+- [ ] Mechanical (default): pill actions, 16px hairline surfaces without shadows, ghost icon buttons, 2px action shadow with exact 2px press, dark-mode counterpart.
+- [ ] Glass: original imported cascade untouched; legacy sovereign/creator choices mapped.
+- [ ] "Weergave" section first on account settings with live preview cards; compact switch in menus.
+- [ ] Dev-only material lab for signed-out visual verification; tests; Chromium verification; homepage unchanged.
+- [ ] Account-level sync of the choice: blocked by original ROUT sign-in configuration (device + cookie works now).

@@ -1,9 +1,11 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState, ReactNode } from "react";
 import { useMatches, useRouterState } from "@tanstack/react-router";
-import { DEFAULT_INTERFACE_THEME, INTERFACE_THEME_KEY, isInternalInterface, parseInterfaceTheme, type InterfaceTheme } from "@/lib/internal-interface-theme";
+import { isInternalInterface, type ColorMode, type InterfaceTheme } from "@/lib/internal-interface-theme";
+import { setUiPreferences } from "@/lib/ui-preferences-store";
+import { useUiPreferences } from "@/hooks/useUiPreferences";
 
 /** What the user picked. 'system' follows the OS preference live. */
-export type ThemeMode = "system" | "light" | "dark";
+export type ThemeMode = ColorMode;
 /** What is actually painted. */
 export type ResolvedTheme = "light" | "dark";
 
@@ -21,90 +23,61 @@ type Ctx = {
 };
 
 const ThemeContext = createContext<Ctx | undefined>(undefined);
-const STORAGE_KEY = "qrcraft-theme";
+const DARK_QUERY = "(prefers-color-scheme: dark)";
 
-function systemTheme(): ResolvedTheme {
-  if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+function systemPrefersDark() {
+  return typeof window !== "undefined" && window.matchMedia(DARK_QUERY).matches;
 }
 
-function getInitialMode(): ThemeMode {
-  if (typeof window === "undefined") return "system";
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "light" || stored === "dark" || stored === "system") return stored;
-  return "system";
-}
-
+/**
+ * Colour mode and workspace material come from one device store. The <head>
+ * boot script already painted both before hydration; effects only keep the
+ * document in sync with later changes and never clear attributes in between.
+ */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Start from 'system' on both server and first client render so hydration matches;
-  // the stored preference is applied in an effect right after mount.
-  const [mode, setModeState] = useState<ThemeMode>("system");
-  const [systemPref, setSystemPref] = useState<ResolvedTheme>("light");
-  const [interfaceTheme, setInterfaceThemeState] = useState<InterfaceTheme>(DEFAULT_INTERFACE_THEME);
+  const { material: interfaceTheme, mode } = useUiPreferences();
+  // Hydration starts from "light"; the effect corrects it without touching the already-correct <html>.
+  const [systemDark, setSystemDark] = useState(false);
   const routeIds = useMatches({ select: matches => matches.map(match => match.routeId) });
   const pathname = useRouterState({ select: state => state.location.pathname });
   const internalUi = isInternalInterface(pathname, routeIds);
 
   useEffect(() => {
-    try { setInterfaceThemeState(parseInterfaceTheme(localStorage.getItem(INTERFACE_THEME_KEY))); }
-    catch { /* Storage denial must not prevent workspace rendering. */ }
-    const sync = (event: StorageEvent) => {
-      if (event.key === INTERFACE_THEME_KEY || event.key === null) setInterfaceThemeState(parseInterfaceTheme(event.newValue));
-    };
-    window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
-  }, []);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    if (internalUi) {
-      root.dataset["theme"] = interfaceTheme;
-      root.dataset["workspaceUi"] = "internal";
-    } else {
-      delete root.dataset["theme"];
-      delete root.dataset["workspaceUi"];
-    }
-    return () => {
-      delete root.dataset["theme"];
-      delete root.dataset["workspaceUi"];
-    };
-  }, [internalUi, interfaceTheme]);
-
-  const setInterfaceTheme = (next: InterfaceTheme) => {
-    setInterfaceThemeState(next);
-    try { localStorage.setItem(INTERFACE_THEME_KEY, next); }
-    catch { /* Keep the live choice when storage is unavailable. */ }
-  };
-
-  useEffect(() => {
-    setModeState(getInitialMode());
-    setSystemPref(systemTheme());
-  }, []);
-
-  // Track OS changes live while in system mode.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (e: MediaQueryListEvent) => setSystemPref(e.matches ? "dark" : "light");
+    const mql = window.matchMedia(DARK_QUERY);
+    setSystemDark(mql.matches);
+    const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
   }, []);
 
-  const theme: ResolvedTheme = mode === "system" ? systemPref : mode;
-
-  useEffect(() => {
+  // Layout effects: React may rewrite <html> attributes on mode/route change; repair before paint.
+  useLayoutEffect(() => {
+    const dark = mode === "dark" || (mode === "system" && systemPrefersDark());
     const root = document.documentElement;
-    root.classList.toggle("dark", theme === "dark");
-    root.style.colorScheme = theme;
-    localStorage.setItem(STORAGE_KEY, mode);
-  }, [theme, mode]);
+    root.classList.toggle("dark", dark);
+    root.style.colorScheme = dark ? "dark" : "light";
+  }, [mode, systemDark]);
 
-  const setMode = (m: ThemeMode) => setModeState(m);
-  const setTheme = (t: ResolvedTheme) => setModeState(t);
-  const toggleTheme = () => setModeState(theme === "dark" ? "light" : "dark");
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (internalUi) {
+      root.dataset["workspaceUi"] = "internal";
+      root.dataset["theme"] = interfaceTheme;
+    } else {
+      delete root.dataset["workspaceUi"];
+      delete root.dataset["theme"];
+    }
+  }, [internalUi, interfaceTheme]);
+
+  const theme: ResolvedTheme = mode === "system" ? (systemDark ? "dark" : "light") : mode;
+  const setMode = (next: ThemeMode) => setUiPreferences({ mode: next });
+  const setInterfaceTheme = (next: InterfaceTheme) => setUiPreferences({ material: next });
 
   return (
-    <ThemeContext.Provider value={{ theme, mode, setMode, toggleTheme, setTheme, interfaceTheme, setInterfaceTheme, internalUi }}>
+    <ThemeContext.Provider value={{
+      theme, mode, setMode, setTheme: setMode, interfaceTheme, setInterfaceTheme, internalUi,
+      toggleTheme: () => setMode(theme === "dark" ? "light" : "dark"),
+    }}>
       {children}
     </ThemeContext.Provider>
   );
