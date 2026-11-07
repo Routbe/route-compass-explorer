@@ -1508,7 +1508,7 @@ select:focus-visible {
 }
 
 /* Liquid Glass lens: promoted only where SVG backdrop filters render (see LiquidGlass.tsx). */
-html[data-liquid] [style*="--lg-filter"] { backdrop-filter: var(--lg-filter) !important; }
+html[data-liquid]:not([data-theme="mechanical"]) [style*="--lg-filter"] { backdrop-filter: var(--lg-filter) !important; }
 
 @utility acrylic-card {
   position: relative;
