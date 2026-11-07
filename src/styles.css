@@ -2011,3 +2011,4 @@ body:has(.infra-home) :is(.spatial-glass, .spatial-dialog, .spatial-sheet, [aria
 body:has(.infra-home) [aria-label="Weergave wisselen"] { border-width: 1px; }
 .infra-home [data-testid="back-to-top"] { background: var(--color-foreground); box-shadow: var(--stealth-panel-shadow) !important; }
 .infra-home [data-testid="back-to-top"]:active { translate: var(--stealth-press-distance) var(--stealth-press-distance); box-shadow: none !important; }
+body:has(.infra-home):has([aria-label="Weergave wisselen"]) [data-testid="back-to-top"] { bottom: 80px; }
