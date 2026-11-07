@@ -45,3 +45,9 @@
 - [ ] Compare original provider catalog and restore all public sign-in choices without replacing existing identities or weakening readiness checks.
 - [ ] Diagnose Google Wallet logo/art serving and existing-pass updates; correct verified design-delivery failures.
 - [ ] Run targeted auth/Wallet regressions and verify public UI/image paths; name remaining credential or real-device blockers.
+
+## Correction: homepage rollback and internal interface engine
+
+- [ ] Restore the gateway exactly before the Stealth Brutalism styling changes.
+- [ ] Add internal-only Sovereign (default) and Creator material variables with persisted, live settings switcher.
+- [ ] Verify homepage parity, internal material/press states, persistence and existing workflows; authenticated checks still require original auth configuration.
