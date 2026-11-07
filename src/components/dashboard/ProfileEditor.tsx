@@ -2210,7 +2210,7 @@ export function ProfileEditor({ variant = "verified", pageMode = "profile", onPa
             </button>
           </div>
           <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto bg-muted/30 p-4">
-            <div className="mx-auto w-full max-w-[320px] rounded-[2.6rem] border border-border/70 bg-foreground/90 p-[10px] shadow-[0_24px_60px_-20px_rgba(0,0,0,0.55)]">
+            <div data-interface-artwork className="mx-auto w-full max-w-[320px] rounded-[2.6rem] border border-border/70 bg-foreground/90 p-[10px] shadow-[0_24px_60px_-20px_rgba(0,0,0,0.55)]">
               <div className="relative overflow-hidden rounded-[2rem] bg-background">
                 <span className="absolute left-1/2 top-2 z-10 h-1.5 w-16 -translate-x-1/2 rounded-full bg-foreground/25" />
                 <div className="scrollbar-slim aspect-[9/19.5] overflow-y-auto text-foreground">

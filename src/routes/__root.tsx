@@ -22,6 +22,8 @@ import { DevModeToggle } from "@/components/DevModeToggle";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/hooks/useTheme";
+import { DEFAULT_INTERFACE_THEME, isInternalInterface } from "@/lib/internal-interface-theme";
+import { useMatches } from "@tanstack/react-router";
 import { I18nProvider } from "@/lib/i18n";
 import { AuthProvider } from "@/hooks/useAuth";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -172,10 +174,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  const pathname = useRouterState({ select: state => state.location.pathname });
+  const routeIds = useMatches({ select: matches => matches.map(match => match.routeId) });
+  const internalUi = isInternalInterface(pathname, routeIds);
   return (
     // Het thema-effect (useTheme) zet na hydratie class/colorScheme op <html>;
     // suppressHydrationWarning voorkomt een loze React-waarschuwing daarover.
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-workspace-ui={internalUi ? "internal" : undefined} data-theme={internalUi ? DEFAULT_INTERFACE_THEME : undefined} suppressHydrationWarning>
       <head>
         <BrandedHeadContent />
         {/* After the route tags, so a page accent colour (no media) still wins. */}

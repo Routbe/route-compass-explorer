@@ -9,18 +9,6 @@
   --interface-edge: hsl(var(--foreground) / 0.65);
   --interface-surface: hsl(var(--card));
   --interface-control: hsl(var(--secondary));
-  --acrylic-base: var(--interface-surface);
-  --spatial-base: var(--interface-control);
-  --hardware-metal: var(--interface-control);
-  --hardware-cavity: hsl(var(--background));
-  --hardware-edge: var(--interface-edge);
-  --chamfer-light: var(--interface-edge);
-  --chamfer-fade: var(--interface-edge);
-  --hardware-raised: var(--interface-block-shadow);
-  --hardware-recessed: none;
-  --paper-shadow: var(--interface-block-shadow);
-  --paper-shadow-lg: var(--interface-block-shadow);
-  --paper-shadow-xl: var(--interface-block-shadow);
 }
 
 /* Scope also reaches body portals; the limit preserves user-controlled artwork. */
@@ -55,10 +43,12 @@
   .spatial-tab {
     background-color: var(--interface-control) !important;
   }
-  :is([role="tab"][aria-selected="true"], [role="tab"][data-state="active"], [aria-pressed="true"], [role="radio"][aria-checked="true"]) {
+  :is([role="tab"][aria-selected="true"], [role="tab"][data-state="active"], [aria-pressed="true"], [role="radio"][aria-checked="true"], .spatial-tab[data-state="on"]) {
     background-color: hsl(var(--foreground)) !important;
     color: hsl(var(--background)) !important;
   }
+  :is(.spatial-track, .spatial-profile-tabs) :is(button, [role="tab"]) > span,
+  .spatial-tab :is(span, svg) { color: inherit !important; }
   :is(button, [role="button"], [role="tab"], .spatial-button, .spatial-tab):not(:disabled):not([aria-disabled="true"]):active {
     translate: var(--interface-offset) var(--interface-offset) !important;
     box-shadow: none !important;
