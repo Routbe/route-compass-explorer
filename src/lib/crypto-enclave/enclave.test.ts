@@ -3,7 +3,7 @@ import "fake-indexeddb/auto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { wipe } from "@/lib/crypto/wipe";
+import { wipe, wipeMessage } from "@/lib/crypto/wipe";
 import { open } from "@/lib/e2ee/crypto";
 import { loadDeviceKey } from "@/lib/e2ee/device-key";
 import { encryptLedgerEvent } from "@/lib/ledger/crypto";
@@ -37,6 +37,17 @@ describe("memory wiping", () => {
     wipe(detached, backing.subarray(1, 3), wide);
     expect([...backing]).toEqual([7, 0, 0, 10]);
     expect([...wide]).toEqual([0, 0]);
+  });
+  it("cleans nested structured-clone containers without executing getters", () => {
+    const key = new Uint8Array([1, 2]);
+    const plaintext = new Uint8Array([3, 4]);
+    const getter = vi.fn(() => { throw new Error("Must not run"); });
+    const input = { entries: new Map([[key, new Set([plaintext])]]) };
+    Object.defineProperty(input, "secret", { get: getter, enumerable: true });
+    expect(() => wipeMessage(input)).not.toThrow();
+    expect([...key]).toEqual([0, 0]);
+    expect([...plaintext]).toEqual([0, 0]);
+    expect(getter).not.toHaveBeenCalled();
   });
 });
 

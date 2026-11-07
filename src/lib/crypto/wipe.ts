@@ -22,11 +22,26 @@ export function wipe(...buffers: Array<ArrayBufferView | ArrayBuffer | null | un
 
 /** Covers malformed requests too, without relying on a handler reaching its finally. */
 export function wipeMessage(value: unknown, seen = new Set<object>()): void {
-  if (!value || typeof value !== "object" || seen.has(value)) return;
-  seen.add(value);
-  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
-    wipe(value);
-    return;
+  const pending = [value];
+  while (pending.length) {
+    const current = pending.pop();
+    if (!current || typeof current !== "object" || seen.has(current)) continue;
+    seen.add(current);
+    try {
+      if (ArrayBuffer.isView(current) || current instanceof ArrayBuffer) {
+        wipe(current);
+      } else if (current instanceof Map) {
+        for (const [key, child] of current) pending.push(key, child);
+      } else if (current instanceof Set) {
+        for (const child of current) pending.push(child);
+      } else {
+        // Do not invoke getters while cleaning up an untrusted local request.
+        for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(current))) {
+          if ("value" in descriptor) pending.push(descriptor.value);
+        }
+      }
+    } catch {
+      // Cleanup must never replace sanitized errors (e.g. a hostile Proxy).
+    }
   }
-  for (const child of Object.values(value)) wipeMessage(child, seen);
 }
