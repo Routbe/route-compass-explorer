@@ -2013,3 +2013,9 @@ body:has(.infra-home) [aria-label="Weergave wisselen"] { border-width: 1px; }
 .infra-home [data-testid="back-to-top"] { background: var(--color-foreground); box-shadow: var(--stealth-panel-shadow) !important; }
 .infra-home [data-testid="back-to-top"]:active { translate: var(--stealth-press-distance) var(--stealth-press-distance); box-shadow: none !important; }
 body:has(.infra-home):has([aria-label="Weergave wisselen"]) [data-testid="back-to-top"] { bottom: 80px; }
+
+:root { --google-button-bg: oklch(1 0 0); --google-button-ink: oklch(0.239 0 0); --google-button-border: oklch(0.567 0.004 151); }
+.dark { --google-button-bg: oklch(0.187 0.002 286); --google-button-ink: oklch(0.917 0 0); --google-button-border: oklch(0.653 0.005 151); }
+.google-sign-in { background: var(--google-button-bg); color: var(--google-button-ink); border: 1px solid var(--google-button-border); font-weight: 500; font-size: 14px; line-height: 20px; }
+.google-sign-in:hover { background: var(--google-button-bg); }
+.google-sign-in svg { width: 18px; height: 18px; }

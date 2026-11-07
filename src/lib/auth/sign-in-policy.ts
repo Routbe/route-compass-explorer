@@ -30,6 +30,7 @@ const ALLOWED_EXACT = new Set([
   "/oauth2/link",
   "/sign-in/social",
   "/sign-in/oauth2",
+  "/fediverse/verify",
   // First factors besides passkeys.
   "/sign-in/email",
   "/sign-in/magic-link",

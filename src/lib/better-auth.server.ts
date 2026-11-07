@@ -13,6 +13,7 @@ import { canonicalAppUrl, isApprovedHost } from "@/lib/app-url";
 import { EXPLICIT_ACCOUNT_LINKING } from "@/lib/identity/link-rules";
 import { AUTH_COOKIE_ATTRIBUTES, configuredAuthOrigin , chooseAuthBaseUrl } from "@/lib/auth-origin";
 import { logServerError } from "@/lib/security/safe-errors";
+import { fediverseSession } from "@/lib/auth/fediverse-session";
 
 /**
  * Self-hosted Better Auth — ROUT's own identity layer (System A).
@@ -20,8 +21,8 @@ import { logServerError } from "@/lib/security/safe-errors";
  * Sign-in: passkey (WebAuthn/FIDO2), one-time e-mail link or e-mail + password.
  * With 2FA switched on, password and e-mail-link sign-ins need a second step
  * (authenticator app, SMS, recovery code or passkey); admins must have 2FA on.
- * Google, GitHub, GitLab, Apple and OIDC stay configured solely for LINKING
- * identity proofs to a signed-in member; they can never start a session.
+ * Configured social providers also sign in existing members on the public portal.
+ * New accounts still require the consent/age/passkey registration flow.
  * Data lives in the `neon_auth` schema.
  *
  * Providers are only enabled when their credentials are present, so a missing
@@ -153,26 +154,27 @@ export function createRoutAuth(request?: Request) {
 
   const socialProviders: Record<string, unknown> = {};
   const google = pair("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET");
-  if (google) socialProviders["google"] = { ...google, prompt: "select_account" };
+  if (google) socialProviders["google"] = { ...google, prompt: "select_account", disableSignUp: true };
   const github = pair("GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET");
-  if (github) socialProviders["github"] = github;
+  if (github) socialProviders["github"] = { ...github, disableSignUp: true };
   const gitlab = pair("GITLAB_CLIENT_ID", "GITLAB_CLIENT_SECRET");
   if (gitlab) {
     // Pinned so GitLab (Group Application) always sees the exact registered URI,
     // whatever host the visitor used. read_user is added by Better Auth itself.
     socialProviders["gitlab"] = {
       ...gitlab,
+      disableSignUp: true,
       issuer: gitlabIssuer(),
       redirectURI: gitlabRedirectUri(),
       scope: ["openid", "profile", "email"],
     };
   }
   const apple = pair("APPLE_CLIENT_ID", "APPLE_CLIENT_SECRET");
-  if (apple) socialProviders["apple"] = { ...apple, appBundleIdentifier: env("APPLE_APP_BUNDLE_IDENTIFIER") };
+  if (apple) socialProviders["apple"] = { ...apple, disableSignUp: true, appBundleIdentifier: env("APPLE_APP_BUNDLE_IDENTIFIER") };
 
-  // Social/OIDC providers stay configured ONLY so a signed-in member can link them
-  // as identity proofs; the gateway (`sign-in-policy.ts`) refuses every social sign-in.
+  // Explicit linking remains unchanged; public sign-in cannot create accounts implicitly.
   const plugins: unknown[] = [
+    fediverseSession(),
     magicLink({
       expiresIn: 60 * 15,
       // New accounts only through the passkey sign-up (consent + age checks).
@@ -196,13 +198,14 @@ export function createRoutAuth(request?: Request) {
   const oidc = pair("OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET");
   const discoveryUrl = env("OIDC_DISCOVERY_URL");
   if (oidc && discoveryUrl) {
-    genericConfigs.push({ providerId: "oidc", discoveryUrl, ...oidc, scopes: ["openid", "email", "profile"], pkce: true });
+    genericConfigs.push({ providerId: "oidc", discoveryUrl, ...oidc, scopes: ["openid", "email", "profile"], pkce: true, disableSignUp: true });
   } else if (!oidc && !discoveryUrl) {
     // Discover on the live (approved) request host so dev/preview never call a dead port.
     const live = requestOrigin(request);
     const issuerBase = baseUrlFor(request);
     genericConfigs.push({
       providerId: "oidc",
+      disableSignUp: true,
       discoveryUrl: `${issuerBase}/.well-known/openid-configuration`,
       clientId: NATIVE_OIDC_CLIENT_ID,
       scopes: ["openid", "email", "profile"],
@@ -215,6 +218,7 @@ export function createRoutAuth(request?: Request) {
   if (infomaniak) {
     genericConfigs.push({
       providerId: "infomaniak",
+      disableSignUp: true,
       ...infomaniak,
       authorizationUrl: "https://login.infomaniak.com/authorize",
       tokenUrl: "https://login.infomaniak.com/token",

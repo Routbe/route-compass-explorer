@@ -75,8 +75,10 @@ export const Route = createFileRoute("/api_/public/bluesky/callback")({
           const linked = await maybeLinkToCurrentUser(request, "bluesky", result.did, result.handle);
           if (linked) return redirectTo(linked, [clear, clearLinkIntent()]);
 
-          // Passkey-only: Bluesky is an identity proof that can be linked, never a sign-in.
-          return redirectTo("/auth/sign-in?error=method_disabled", [clear]);
+          const { federatedSignInResponse } = await import("@/lib/auth/fediverse-session.server");
+          const response = await federatedSignInResponse(request, "bluesky", result.did);
+          response.headers.append("set-cookie", clear);
+          return response;
         } catch (error) {
           const { logServerError } = await import("@/lib/security/safe-errors");
           logServerError("auth.bluesky.callback", error);
