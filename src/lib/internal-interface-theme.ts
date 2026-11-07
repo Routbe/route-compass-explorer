@@ -34,7 +34,7 @@ export function parseUiCookies(header: string | null | undefined): UiPreferences
 
 export function isInternalInterface(pathname: string, routeIds: readonly string[]): boolean {
   return routeIds.some(id => id.startsWith("/_authenticated")) ||
-    ["/studio", "/studio/grid", "/qr"].includes(pathname);
+    ["/studio", "/studio/grid", "/qr", "/dev/material-lab"].includes(pathname);
 }
 
 /**
