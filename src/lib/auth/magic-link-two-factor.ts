@@ -53,7 +53,7 @@ export function magicLinkTwoFactor(options: Options) {
     hooks: {
       after: [
         {
-          matcher: (context: { path?: string }) => context.path === "/magic-link/verify",
+          matcher: (context: { path?: string }) => context.path === "/magic-link/verify" || context.path === "/fediverse/verify" || /^\/(?:oauth2\/)?callback\//.test(context.path ?? ""),
           handler: createAuthMiddleware(async (raw) => {
             const ctx = raw as unknown as Ctx;
             const data = ctx.context.newSession;

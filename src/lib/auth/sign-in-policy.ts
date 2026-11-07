@@ -9,8 +9,8 @@
  * second step: authenticator app (TOTP), SMS code, recovery code or a passkey.
  * Admins must have 2FA switched on before any admin surface answers.
  *
- * New accounts are still created only through the passkey sign-up ticket; social
- * providers can only be LINKED to a signed-in member, never start a session.
+ * New accounts are still created only through the passkey sign-up ticket;
+ * configured providers can sign in existing members on the public portal.
  */
 
 /** Paths Better Auth may serve. Everything else answers 410 `method_disabled`. */
@@ -28,6 +28,9 @@ const ALLOWED_EXACT = new Set([
   // Linking a social identity to the signed-in member (never a sign-in).
   "/link-social",
   "/oauth2/link",
+  "/sign-in/social",
+  "/sign-in/oauth2",
+  "/fediverse/verify",
   // First factors besides passkeys.
   "/sign-in/email",
   "/sign-in/magic-link",

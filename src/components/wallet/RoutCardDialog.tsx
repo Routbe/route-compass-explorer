@@ -533,6 +533,7 @@ export function RoutCardDialog({ open, onOpenChange, handle, space, inline = fal
           onPointerCancel={onRelease}
           onDoubleClick={() => { if (zoomed) zoom.pan = { x: 0, y: 0 }; setZoom(zoomed ? 0 : 0.75); }}
           ref={stage}
+          data-interface-artwork
           style={{ cursor: zoomed ? "move" : "grab" }}
           data-scene-ready={ready ? "true" : undefined}
         >

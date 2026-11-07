@@ -34,8 +34,21 @@
 - [ ] Original account and private-data flows: Neon is linked and its runtime role checks pass; original signing keys, account configuration, and authenticated end-to-end checks remain required.
 - [ ] Payment, email, OAuth, storage, and scheduled services: require provider configuration and end-to-end checks.
 
-## Current request: Stealth Brutalism landing page
+## Superseded request: Stealth Brutalism landing page (rolled back by correction)
 
 - [x] Scope crisp borders, hard 4px shadows and mechanical action states to the public gateway only, including shared portals and preview controls.
 - [x] Preserve the monospace terminal, ROUT typography, page content and existing navigation; remove conflicting hero scale-on-press animation.
 - [x] Verify zero diffuse shadows/filters, exact 4px active displacement, QR changes, menu/dialogs, sign-in navigation and 1280/810/390px layouts in Chromium; 18 existing tests and automatic build checks pass.
+
+## Current request: restore public login options and Google Wallet design
+
+- [x] Compare original provider catalog and restore all seven public sign-in choices; preserve readiness checks, linked subjects, one-time sessions and 2FA.
+- [x] Diagnose Google Wallet routes and existing-pass REST updates: logo route already works; official GenericObject schema confirms existing background field is correct, not a class field. Existing design/sync regression tests pass.
+- [ ] Complete real Google Wallet saved-pass design delivery and OAuth sign-in: blocked by original account/provider credentials and access to a real saved pass/device; no new accounts or credentials substituted.
+
+## Correction: homepage rollback and internal interface engine
+
+- [x] Restore the original Gateway file byte-for-byte and remove all Stealth CSS while retaining auth restoration.
+- [x] Add internal-only Sovereign (default) and Creator material variables, root attributes and persisted, live Settings/Aanpassen controls; artwork excluded.
+- [x] Verify original globe and blur, QR workflow/download, exact 4px press, no internal diffuse effects, Creator persistence and 1280/810/390px layouts in Chromium; policy/lifecycle/auth/Wallet tests and automatic build pass.
+- [ ] Verify signed-in Command Center, profile Studio, Analytics and Settings with real account data: blocked by original ROUT account/signing configuration; public QR Studio and its actual theme controls verified.

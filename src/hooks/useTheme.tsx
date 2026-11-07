@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { useMatches, useRouterState } from "@tanstack/react-router";
+import { DEFAULT_INTERFACE_THEME, INTERFACE_THEME_KEY, isInternalInterface, parseInterfaceTheme, type InterfaceTheme } from "@/lib/internal-interface-theme";
 
 /** What the user picked. 'system' follows the OS preference live. */
 export type ThemeMode = "system" | "light" | "dark";
@@ -13,6 +15,9 @@ type Ctx = {
   setMode: (m: ThemeMode) => void;
   toggleTheme: () => void;
   setTheme: (t: ResolvedTheme) => void;
+  interfaceTheme: InterfaceTheme;
+  setInterfaceTheme: (theme: InterfaceTheme) => void;
+  internalUi: boolean;
 };
 
 const ThemeContext = createContext<Ctx | undefined>(undefined);
@@ -35,6 +40,41 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // the stored preference is applied in an effect right after mount.
   const [mode, setModeState] = useState<ThemeMode>("system");
   const [systemPref, setSystemPref] = useState<ResolvedTheme>("light");
+  const [interfaceTheme, setInterfaceThemeState] = useState<InterfaceTheme>(DEFAULT_INTERFACE_THEME);
+  const routeIds = useMatches({ select: matches => matches.map(match => match.routeId) });
+  const pathname = useRouterState({ select: state => state.location.pathname });
+  const internalUi = isInternalInterface(pathname, routeIds);
+
+  useEffect(() => {
+    try { setInterfaceThemeState(parseInterfaceTheme(localStorage.getItem(INTERFACE_THEME_KEY))); }
+    catch { /* Storage denial must not prevent workspace rendering. */ }
+    const sync = (event: StorageEvent) => {
+      if (event.key === INTERFACE_THEME_KEY || event.key === null) setInterfaceThemeState(parseInterfaceTheme(event.newValue));
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (internalUi) {
+      root.dataset["theme"] = interfaceTheme;
+      root.dataset["workspaceUi"] = "internal";
+    } else {
+      delete root.dataset["theme"];
+      delete root.dataset["workspaceUi"];
+    }
+    return () => {
+      delete root.dataset["theme"];
+      delete root.dataset["workspaceUi"];
+    };
+  }, [internalUi, interfaceTheme]);
+
+  const setInterfaceTheme = (next: InterfaceTheme) => {
+    setInterfaceThemeState(next);
+    try { localStorage.setItem(INTERFACE_THEME_KEY, next); }
+    catch { /* Keep the live choice when storage is unavailable. */ }
+  };
 
   useEffect(() => {
     setModeState(getInitialMode());
@@ -64,7 +104,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const toggleTheme = () => setModeState(theme === "dark" ? "light" : "dark");
 
   return (
-    <ThemeContext.Provider value={{ theme, mode, setMode, toggleTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, mode, setMode, toggleTheme, setTheme, interfaceTheme, setInterfaceTheme, internalUi }}>
       {children}
     </ThemeContext.Provider>
   );

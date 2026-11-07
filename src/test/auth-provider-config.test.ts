@@ -58,13 +58,14 @@ describe("auth handler with missing OAuth credentials", () => {
     expect(await res.json()).toMatchObject({ code: "missing_database" });
   }, 30_000);
 
-  it("refuses social sign-in outright: only linking exists", async () => {
+  it("routes public Google and Infomaniak sign-in to credential checks, not method_disabled", async () => {
     clearEnv();
     const res = await call(post("/api/auth/sign-in/social", { provider: "github", callbackURL: "/dashboard" }));
-    expect(res.status).toBe(410);
-    expect(((await res.json()) as { code: string }).code).toBe("method_disabled");
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe("provider_not_configured");
     const generic = await call(post("/api/auth/sign-in/oauth2", { providerId: "infomaniak" }));
-    expect(generic.status).toBe(410);
+    expect(generic.status).toBe(400);
+    expect(await generic.json()).toMatchObject({ code: "provider_not_configured", provider: "infomaniak" });
   }, 30_000);
 
   it("refuses linking an unconfigured provider with provider_not_configured (400)", async () => {

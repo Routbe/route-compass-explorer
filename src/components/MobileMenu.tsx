@@ -19,6 +19,8 @@ import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { HeaderControl } from "@/components/layout/HeaderControls";
 import { spatialHaptic } from "@/lib/spatial-haptics";
+import { useTheme } from "@/hooks/useTheme";
+import { InterfaceThemeSwitcher } from "@/components/settings/InterfaceThemeSwitcher";
 
 const itemClass =
   "flex items-start gap-3 rounded-xl px-3 py-2.5 text-sm text-foreground hover:bg-muted/60 transition-colors";
@@ -73,6 +75,7 @@ function Section({ title, items, onNavigate }: { title: string; items: readonly 
 export function MobileMenu({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const { t } = useI18n();
+  const { internalUi } = useTheme();
 
   return (
     <HeaderControl name="tools"><Sheet open={open} onOpenChange={(next) => { setOpen(next); spatialHaptic(); }}>
@@ -96,6 +99,11 @@ export function MobileMenu({ className }: { className?: string }) {
         <div className="mt-4 flex min-h-0 flex-1 flex-col gap-3">
           <Section title={t("menu.tools")} items={TOOLS} onNavigate={() => setOpen(false)} />
           <Section title={t("menu.infrastructure")} items={INFRASTRUCTURE} onNavigate={() => setOpen(false)} />
+
+          {internalUi && <div className="space-y-2 border-t border-border pt-3">
+            <p className="eyebrow px-3">Aanpassen</p>
+            <InterfaceThemeSwitcher />
+          </div>}
 
           <div
             className="mt-auto flex items-center gap-2 border-t border-border pt-4"

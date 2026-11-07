@@ -1,0 +1,70 @@
+/* Independent workspace materials. Creator deliberately leaves the imported cascade intact. */
+:root {
+  --interface-offset: 4px;
+  --interface-corner: 2px;
+  --interface-ink: oklch(0 0 0);
+  --interface-block-shadow: var(--interface-offset) var(--interface-offset) 0px var(--interface-ink);
+  --interface-color-spectrum: conic-gradient(from 0deg, oklch(0.63 0.25 29), oklch(0.97 0.21 110), oklch(0.87 0.29 142), oklch(0.9 0.15 195), oklch(0.45 0.31 264), oklch(0.7 0.32 328), oklch(0.63 0.25 29));
+}
+:root[data-workspace-ui="internal"][data-theme="sovereign"] {
+  --interface-edge: hsl(var(--foreground) / 0.65);
+  --interface-surface: hsl(var(--card));
+  --interface-control: hsl(var(--secondary));
+}
+
+/* Scope also reaches body portals; the limit preserves user-controlled artwork. */
+@scope (:root[data-workspace-ui="internal"][data-theme="sovereign"]) to ([data-profile-theme], [data-qr-container], [data-interface-artwork], .preview-sheet) {
+  *, *::before, *::after {
+    filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    transition-property: background-color, color, border-color, opacity, transform !important;
+  }
+  :is(.acrylic-card, .spatial-glass, .spatial-dialog, .spatial-sheet, .spatial-track, .spatial-profile-tabs,
+    [class~="bg-card"][class~="border"], [class~="bg-card/50"][class~="border"],
+    [class~="shadow-md"], [class~="shadow-lg"], [class~="shadow-xl"],
+    [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-sonner-toast]) {
+    background: var(--interface-surface) !important;
+    border: 1px solid var(--interface-edge) !important;
+    border-radius: var(--interface-corner) !important;
+    box-shadow: var(--interface-block-shadow) !important;
+  }
+  :is(.glow-card, .acrylic-card, .spatial-glass)::before,
+  :is(.glow-card, .acrylic-card, .spatial-glass)::after { display: none; }
+  :is(header, [class~="bg-background/90"], [class~="bg-background/95"]) { background: hsl(var(--background)) !important; }
+  :is(button, [role="button"], [role="tab"], .spatial-button, .spatial-tab) {
+    background-image: none !important;
+    border: 1px solid var(--interface-edge) !important;
+    border-radius: var(--interface-corner) !important;
+    box-shadow: var(--interface-block-shadow) !important;
+    transition: background-color 100ms linear, border-color 100ms linear !important;
+  }
+  [data-interface-color] { background-image: var(--interface-color-spectrum) !important; }
+  .spatial-indicator { display: none !important; }
+  :is(button, [role="button"], [role="tab"]):not(.spatial-button):not([data-interface-color]),
+  .spatial-button:is([data-spatial-control="outline"], [data-spatial-control="soft"], [data-spatial-control="ghost"], [data-spatial-control="link"]),
+  .spatial-tab {
+    background-color: var(--interface-control) !important;
+  }
+  :is([role="tab"][aria-selected="true"], [role="tab"][data-state="active"], [aria-pressed="true"], [role="radio"][aria-checked="true"], .spatial-tab[data-state="on"]) {
+    background-color: hsl(var(--foreground)) !important;
+    color: hsl(var(--background)) !important;
+  }
+  :is(.spatial-track, .spatial-profile-tabs) :is(button, [role="tab"]) > span,
+  .spatial-tab :is(span, svg) { color: inherit !important; }
+  :is(button, [role="button"], [role="tab"], .spatial-button, .spatial-tab):not(:disabled):not([aria-disabled="true"]):active {
+    translate: var(--interface-offset) var(--interface-offset) !important;
+    box-shadow: none !important;
+  }
+  :is(button:disabled, [aria-disabled="true"]) { box-shadow: none !important; }
+  :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select, .spatial-input, .spatial-control-pill, .spatial-control-slot) {
+    background: hsl(var(--background)) !important;
+    border: 1px solid var(--interface-edge) !important;
+    border-radius: var(--interface-corner) !important;
+  }
+  :is(button, [role="button"], input, textarea, select, [role="tab"]):focus-visible {
+    outline: 2px solid hsl(var(--ring)) !important;
+    outline-offset: 3px;
+  }
+}

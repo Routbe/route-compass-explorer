@@ -17,7 +17,7 @@ export const Route = createFileRoute("/api_/public/auth/providers")({
         return Response.json(
           diagnose
             ? { enabled: enabledProviders(), ...authDiagnostics(request), live: await liveAuthChecks() }
-            : { providers: enabledProviders(), readiness },
+            : { providers: [...enabledProviders(), ...((process.env["APP_SESSION_SECRET"] || process.env["NEON_AUTH_COOKIE_SECRET"]) ? ["mastodon", "bluesky"] : [])], readiness },
           { headers: { "cache-control": "no-store" } },
         );
       },

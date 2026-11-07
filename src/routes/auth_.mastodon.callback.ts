@@ -34,8 +34,8 @@ export const Route = createFileRoute("/auth_/mastodon/callback")({
             h.append("set-cookie", clearLinkIntent());
             return new Response(null, { status: 303, headers: h });
           }
-          // Passkey-only: Mastodon is an identity proof that can be linked, never a sign-in.
-          return new Response(null, { status: 303, headers: { location: "/auth/sign-in?error=method_disabled", "cache-control": "no-store" } });
+          const { federatedSignInResponse } = await import("@/lib/auth/fediverse-session.server");
+          return federatedSignInResponse(request, "mastodon", result.subject);
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Aanmelden via Mastodon mislukte.";

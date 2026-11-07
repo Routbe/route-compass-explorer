@@ -25,6 +25,7 @@ import { SIGNUP_CONSENT_VERSION, canSubmitSignUp } from "@/lib/signup-consent";
 import { isMinorDob, signupAgeProblem } from "@/lib/minor-safety";
 import { redeemLoginCodeFn } from "@/lib/login-code.functions";
 import { SecondFactorStep } from "@/components/auth/SecondFactorStep";
+import { PublicProviderSignIn } from "@/components/auth/PublicProviderSignIn";
 
 /** Deliberately permissive: catches typos, never rejects a valid address. */
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -94,13 +95,15 @@ export default function AuthNeon({ initialMode = "signin" }: { initialMode?: Mod
   const minor = isMinorDob(dob);
   const redirected = useRef(false);
   const [readiness, setReadiness] = useState<AuthReadiness | null>(null);
+  const [configuredProviders, setConfiguredProviders] = useState<string[]>([]);
   const unavailable = readiness?.ready === false;
 
   useEffect(() => {
     fetch("/api/public/auth/providers", { credentials: "omit" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((body: { readiness?: AuthReadiness }) => {
+      .then((body: { providers?: string[]; readiness?: AuthReadiness }) => {
         if (body.readiness) setReadiness(body.readiness);
+        setConfiguredProviders(body.providers ?? []);
       })
       .catch(() => setReadiness(null));
   }, []);
@@ -484,6 +487,7 @@ export default function AuthNeon({ initialMode = "signin" }: { initialMode?: Mod
                     {linkButtonStep("reset-request", t("auth.mf.forgot"), KeyRound)}
                   </div>
                   {adminPortal && <p className="text-[11px] text-muted-foreground">{t("auth.mf.adminNote")}</p>}
+                  {!adminPortal && <PublicProviderSignIn configured={configuredProviders} readiness={readiness} disabled={loading} />}
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
                     {!adminPortal && linkButton("signup", t("auth.ui.signup.cta"), KeyRound)}
                     {linkButton("recovery", t("auth.mf.recoveryLink"), LifeBuoy)}

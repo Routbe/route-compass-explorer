@@ -62,6 +62,8 @@ import { authClient } from "@/lib/auth-client";
 import { LOCALES, LOCALE_LABELS, useI18n } from "@/lib/i18n";
 import { useLanguagePreference } from "@/hooks/useLanguagePreference";
 import { i18n as trI18n } from "@/lib/i18n";
+import { InterfaceThemeSwitcher } from "@/components/settings/InterfaceThemeSwitcher";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 type SettingsTab = "profile" | "security" | "identities" | "payments" | "data" | "status";
 
@@ -375,6 +377,11 @@ export default function AccountSettings() {
         {/* Tab 1 — Profile */}
         <TabsContent value="profile" className="space-y-4">
           <DocHelpLink to="/info/profiles" />
+          <section className="space-y-3 rounded-2xl border border-border bg-card p-4 sm:p-5">
+            <h2 className="flex items-center gap-2 text-lg font-medium"><Monitor className="size-4" /> Aanpassen</h2>
+            <InterfaceThemeSwitcher />
+            <ThemeToggle />
+          </section>
           <section className="space-y-3 rounded-2xl border border-border bg-card p-4 sm:p-5">
             <h2 className="flex items-center gap-2 text-lg font-medium">
               <UserIcon className="h-4 w-4" /> Profile
