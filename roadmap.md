@@ -2,8 +2,8 @@
 
 ## Current request: exact import, then Neon
 
-- [ ] Compare all imported application source and assets with the supplied repository.
-- [ ] Restore any unintended differences and verify ROUT's public experience.
+- [x] Compare all imported application source and assets with the supplied repository.
+- [x] Restore any unintended differences and verify ROUT's public experience.
 - [ ] Link Neon only after the source-import verification passes.
 - [ ] Verify existing Neon compatibility without changing records or permissions.
 
