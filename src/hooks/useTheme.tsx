@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState, ReactNode } from "react";
 import { useMatches, useRouterState } from "@tanstack/react-router";
 import { isInternalInterface, type ColorMode, type InterfaceTheme } from "@/lib/internal-interface-theme";
 import { setUiPreferences } from "@/lib/ui-preferences-store";
@@ -50,14 +50,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => mql.removeEventListener("change", onChange);
   }, []);
 
-  useEffect(() => {
+  // Layout effects: React may rewrite <html> attributes on mode/route change; repair before paint.
+  useLayoutEffect(() => {
     const dark = mode === "dark" || (mode === "system" && systemPrefersDark());
     const root = document.documentElement;
     root.classList.toggle("dark", dark);
     root.style.colorScheme = dark ? "dark" : "light";
   }, [mode, systemDark]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     if (internalUi) {
       root.dataset["workspaceUi"] = "internal";
