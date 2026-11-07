@@ -35,5 +35,19 @@
     }
   ],
   "exactProductionParity": "Not verified: original accounts and connected services require secure configuration.",
-  "neonLinked": false
+  "neonLinked": true,
+  "neonVerification": {
+    "connection": "My Neon",
+    "reachable": true,
+    "publicTableCount": 193,
+    "runtimeRoleExists": true,
+    "loginCanAssumeRuntimeRole": true,
+    "runtimeRoleSuperuser": false,
+    "runtimeRoleBypassesRls": false,
+    "runtimeRoleCanUseTableOwnerRole": false,
+    "recordsChanged": false,
+    "permissionsChanged": false,
+    "authenticatedEndToEnd": "not verified; original account signing configuration not present",
+    "postConnectionHomepage": "ROUT home renders, no browser page errors"
+  }
 }
