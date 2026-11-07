@@ -1,0 +1,32 @@
+{
+  "worker": {
+    "onlyHandleAndMnemonic": true,
+    "transferredInputDetached": true,
+    "ciphertextOnly": true,
+    "roundTrip": true,
+    "wrongAadRejected": true,
+    "concurrentIdentityStable": true,
+    "eventCiphertextOnly": true,
+    "chainVerified": true,
+    "openedVerifiedEvent": true,
+    "tamperRejected": true,
+    "persistedKeyReadable": true,
+    "ciphertextReadableAfterRestart": true,
+    "mainThreadSubtleCalls": 0
+  },
+  "mainDevBytesBefore": 847775,
+  "mainDevBytesAfter": 25865,
+  "modulesAfter": [
+    {
+      "url": "/src/lib/protocol/ledger-client.ts",
+      "bytes": 13623
+    },
+    {
+      "url": "/src/lib/altcha-client.ts",
+      "bytes": 12242
+    }
+  ],
+  "pageErrors": [],
+  "authVerification": "blocked: original Better Auth not configured; no Neon write attempted",
+  "productionBundleSize": "not measured: no production baseline/artifacts"
+}

@@ -12,14 +12,15 @@
 - [x] Run focused source tests and inspect automatic build diagnostics.
 - [x] Document unconfigured accounts, data, and connected services.
 
-## External blockers
-
 ## Current request: isolated browser cryptography
 
-- [ ] Audit client cryptography and preserve ciphertext/storage compatibility.
-- [ ] Move browser encryption, key management, and vault handoff into a dedicated worker with typed messaging.
-- [ ] Overwrite owned sensitive byte buffers on success and failure; document browser limitations.
-- [ ] Run focused security tests and verify the real browser flow, type diagnostics, and bundle separation.
+- [x] Audit client cryptography and preserve ciphertext/storage compatibility.
+- [x] Harden the existing dedicated worker, remove main-thread hash fallback and keep PRF bytes out of React.
+- [x] Overwrite owned sensitive byte buffers on success and failure; document browser limitations.
+- [x] Run 57 focused tests; verify real Chromium encryption, transfers, signing/tamper rejection and worker restart with zero main-thread SubtleCrypto calls.
+- [x] Inspect successful automatic build/type diagnostics and verify development main-thread module separation.
+- [ ] Compare minified production bundle sizes: blocked by absent comparable baseline/artifacts; development-served module bytes are not a production measurement.
+- [ ] Verify authenticated ciphertext writes/readback in Neon: blocked by original ROUT account/signing configuration; browser-local encryption is verified, no database records changed.
 
 ## Previously identified external blockers
 
