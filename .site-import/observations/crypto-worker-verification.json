@@ -12,18 +12,26 @@
     "tamperRejected": true,
     "persistedKeyReadable": true,
     "ciphertextReadableAfterRestart": true,
+    "independentClaimProof": true,
+    "vaultSummaryOnly": true,
+    "vaultResealCiphertextOnly": true,
+    "vaultRoundTrip": true,
+    "vaultSingleUse": true,
+    "cancelScopeAborted": true,
+    "staleScopeRejected": true,
+    "pendingDiscardedOnTermination": true,
     "mainThreadSubtleCalls": 0
   },
   "mainDevBytesBefore": 847775,
-  "mainDevBytesAfter": 25865,
+  "mainDevBytesAfter": 28540,
   "modulesAfter": [
     {
       "url": "/src/lib/protocol/ledger-client.ts",
-      "bytes": 13623
+      "bytes": 15102
     },
     {
       "url": "/src/lib/altcha-client.ts",
-      "bytes": 12242
+      "bytes": 13438
     }
   ],
   "pageErrors": [],
