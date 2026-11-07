@@ -39,3 +39,6 @@ use the editor.
 - Browser encryption, protocol verification and private-key operations use the existing typed crypto-enclave worker with ordered requests, transferred buffers and no UI fallback; shared crypto helpers may still run in server-only handlers. Why: preserves ciphertext compatibility without exposing derived keys to React.
 - Zero-fill owned secret/plaintext byte views in finally, hold pending master keys non-extractably and retain vault configuration only as ciphertext; recovery strings/WebAuthn input and engine-internal copies are not erasable or XSS-isolated. Why: cleanup must be testable without claiming a hardware enclave.
 - Worker dispatch announces execution start for per-operation deadlines; auth changes terminate volatile state and invalidate captured crypto/HTTP scopes, while owner-keyed UI sessions reject stale completions and preserve persisted device keys. Why: logout, queue delays and late replies must not revive keys or another owner's plaintext.
+
+## Public gateway presentation
+- Scope gateway material overrides to `.infra-home` and its active body/portals, leaving shared component variants and internal/member-profile materials intact. Why: landing-page styling must not change private workflows or imported profile themes.
