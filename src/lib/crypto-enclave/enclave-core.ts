@@ -34,6 +34,8 @@ const enc = new TextEncoder();
 const dec = new TextDecoder();
 const MINUTE = 60_000;
 const PENDING_TTL = 15 * MINUTE;
+// Largest input whose base64url ciphertext fits the existing <64 KiB blind column.
+const MAX_PLAINTEXT_BYTES = 49120;
 
 export class EnclaveFailure extends Error {
   constructor(readonly code: EnclaveErrorCode) {
@@ -200,7 +202,9 @@ export const handlers: Handlers = {
       if (!sealedConfig) return fail("invalid_input");
       const dk = await deviceKeyFor(userId);
       plaintext = await openBytes(slot.key, sealedConfig, `rout.enclave.pending.v1:${handle}`);
-      return { encrypted: await sealBytes(dk.key, plaintext, workspaceConfigAad(userId)), keyId: dk.keyId };
+      const encrypted = await sealBytes(dk.key, plaintext, workspaceConfigAad(userId));
+      if (slot.expiresAt <= Date.now()) fail("unknown_handle");
+      return { encrypted, keyId: dk.keyId };
     } finally {
       wipe(plaintext);
       discardVault(handle);
@@ -255,6 +259,7 @@ export const handlers: Handlers = {
   async "data.seal"({ userId, aad, plaintext }) {
     const pt = bytes(plaintext);
     try {
+      if (pt.byteLength > MAX_PLAINTEXT_BYTES) fail("invalid_input");
       const dk = await deviceKeyFor(userId);
       return { encrypted: await sealBytes(dk.key, pt, str(aad, 512)), keyId: dk.keyId };
     } finally {
@@ -344,14 +349,17 @@ export const handlers: Handlers = {
   async "protocol.sealEvent"({ userId, stream, seq, prev, kind, plaintext, capId }) {
     const pt = bytes(plaintext);
     try {
+      if (pt.byteLength > MAX_PLAINTEXT_BYTES) fail("invalid_input");
       if (!isStreamId(stream) || !Number.isSafeInteger(seq) || seq < 1) fail("invalid_input");
       const k = str(kind, 64);
       if (k === "stream.genesis" || k === "cap.revoke" || k.startsWith("pub.")) fail("invalid_input");
       const dk = await deviceKeyFor(userId);
       const blob = await sealBytes(dk.key, pt, eventAad(stream, k));
-      return await withIdentity(str(userId, 200), async (sk) =>
-        signEvent(sk, { stream, seq, prev: prev === null ? null : str(prev, 64), kind: k, body: { sealed: { blob, keyId: dk.keyId } }, ...(capId ? { capId: str(capId, 64) } : {}) }),
-      );
+      return await withIdentity(str(userId, 200), async (sk) => {
+        const event = signEvent(sk, { stream, seq, prev: prev === null ? null : str(prev, 64), kind: k, body: { sealed: { blob, keyId: dk.keyId } }, ...(capId ? { capId: str(capId, 64) } : {}) });
+        if (!verifyEvent(event).ok) fail("invalid_input");
+        return event;
+      });
     } finally {
       wipe(pt);
     }

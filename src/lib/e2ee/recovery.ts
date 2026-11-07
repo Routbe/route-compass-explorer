@@ -1,5 +1,5 @@
 // Master Recovery Key: 24-word BIP39 mnemonic + 2-of-3 Shamir shards over GF(256).
-import { entropyToMnemonic, mnemonicToEntropy, validateMnemonic } from "@scure/bip39";
+import { entropyToMnemonic, mnemonicToEntropy } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { b64u } from "./crypto";
 import { wipe } from "@/lib/crypto/wipe";
@@ -16,8 +16,11 @@ export function newMasterKey(): { key: Uint8Array; mnemonic: string } {
 
 export function masterKeyFromMnemonic(mnemonic: string): Uint8Array {
   const m = mnemonic.trim().toLowerCase().split(/\s+/).join(" ");
-  if (!validateMnemonic(m, wordlist)) throw new Error("Invalid recovery phrase");
-  return mnemonicToEntropy(m, wordlist);
+  try {
+    return mnemonicToEntropy(m, wordlist); // validates once, without a discarded extra entropy buffer
+  } catch {
+    throw new Error("Invalid recovery phrase");
+  }
 }
 
 // GF(256) arithmetic, AES polynomial 0x11b.

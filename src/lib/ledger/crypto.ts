@@ -92,7 +92,7 @@ export async function encryptLedgerEvent(publicKey: JsonWebKey, payload: unknown
   const keyId = await publicKeyId(publicKey);
   const rsa = await crypto.subtle.importKey("jwk", publicKey, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
   const plaintext = encode.encode(JSON.stringify(payload));
-  let keyBytes: Uint8Array | null = null;
+  let keyBytes: Uint8Array<ArrayBuffer> | null = null;
   try {
     keyBytes = crypto.getRandomValues(new Uint8Array(32));
     const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt"]);

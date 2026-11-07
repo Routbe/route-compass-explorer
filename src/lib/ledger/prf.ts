@@ -1,6 +1,6 @@
 // Local base64 helpers: this file runs on the UI thread (WebAuthn is unavailable in
 // workers) and must not pull the ledger crypto module into the main bundle.
-import { enclave } from "@/lib/crypto-enclave/client";
+import { captureEnclaveScope, enclave } from "@/lib/crypto-enclave/client";
 import type { LedgerDraft } from "@/lib/crypto-enclave/client";
 import type { PrivateEnvelope } from "./crypto";
 const toBase64 = (bytes: Uint8Array) => btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(""));
@@ -23,9 +23,11 @@ async function ledgerPrf(credentialId?: string): Promise<{ output: Uint8Array; c
 
 /** WebAuthn requires the UI context; transfer its result before React can hold it. */
 async function withPrf<T>(credentialId: string | undefined, consume: (output: Uint8Array, credentialId: string) => Promise<T>): Promise<T | null> {
+  const scope = captureEnclaveScope();
   const result = await ledgerPrf(credentialId);
   if (!result) return null;
   try {
+    scope.assertCurrent();
     return await consume(result.output, result.credentialId);
   } finally {
     // Successful transfer already detached it; failed setup still gets zeroed.
