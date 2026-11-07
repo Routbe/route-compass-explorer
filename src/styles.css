@@ -2005,6 +2005,7 @@ body:has(.infra-home) :is(.spatial-button, input, select, [role="radio"]):focus-
 }
 /* Portals and the preview-only environment switch sit outside the app frame. */
 body:has(.infra-home) :is(.spatial-glass, .spatial-dialog, .spatial-sheet, [aria-label="Weergave wisselen"]) {
+  background-color: var(--color-popover);
   background-image: none;
   box-shadow: var(--stealth-panel-shadow) !important;
 }
