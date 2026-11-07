@@ -1,0 +1,14 @@
+{
+  "source": "https://github.com/Routbe/rout-compass-explorer-93a611eb",
+  "commit": "427ac48",
+  "kind": "source-repository",
+  "permissionConfirmed": true,
+  "credentialsCopied": false,
+  "databaseMigrationsApplied": false,
+  "sourceWebsiteComparison": "Not applicable: repository source imported, not GitHub website UI.",
+  "checks": [],
+  "blocked": [
+    "Original accounts and private data require compatible external database and Better Auth configuration. No credentials or account data copied.",
+    "Payment, email, OAuth, storage and scheduled services require configuration and verification."
+  ]
+}
