@@ -137,6 +137,18 @@ describe("cryptographic enclave", () => {
     expect(await code("vault.reseal", { handle: active.handle, userId: "missing-device" })).toBe("no_device_key");
     expect(await code("vault.reseal", { handle: active.handle, userId })).toBe("unknown_handle");
   });
+  it("never emits generic ciphertext too large for the existing open/storage format", async () => {
+    const plaintext = new Uint8Array(49120).fill(65);
+    const sealed = await call("data.seal", { userId, aad: "boundary", plaintext });
+    expect(plaintext.every((b) => b === 0)).toBe(true);
+    const back = await call("data.open", { userId, aad: "boundary", blob: sealed.encrypted });
+    expect(back.plaintext.length).toBe(49120);
+    expect(back.plaintext[0]).toBe(65);
+    wipe(back.plaintext);
+    const excess = new Uint8Array(49121).fill(66);
+    expect(await code("data.seal", { userId, aad: "boundary", plaintext: excess })).toBe("invalid_input");
+    expect(excess.every((b) => b === 0)).toBe(true);
+  });
 
   it("keeps ledger private keys inside and wipes the PRF output", async () => {
     const prf = crypto.getRandomValues(new Uint8Array(32));
@@ -204,6 +216,11 @@ describe("protocol identity in the enclave", () => {
 
     const stream = newStreamId();
     const genesis = await call("protocol.signEvent", { userId, draft: { stream, seq: 0, prev: null, kind: "stream.genesis", body: {} } });
+    for (const invalid of [{ kind: "invalid", prev: genesis.hash }, { kind: "profile.patch", prev: null }]) {
+      const plaintext = new Uint8Array([123, 125]);
+      expect(await code("protocol.sealEvent", { userId, stream, seq: 1, ...invalid, plaintext })).toBe("invalid_input");
+      expect([...plaintext]).toEqual([0, 0]);
+    }
     expect(await code("protocol.signEvent", { userId, draft: { stream, seq: 1, prev: genesis.hash, kind: "profile.patch", body: { public: { bio: "x" } } } })).toBe("invalid_input");
 
     const plaintext = new TextEncoder().encode(JSON.stringify({ bio: "TOP-SECRET-BIO" }));

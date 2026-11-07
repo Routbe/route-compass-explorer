@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { callEnclave, enclave, terminateEnclave } from "./client";
+import { callEnclave, captureEnclaveScope, enclave, terminateEnclave } from "./client";
 
 class FakeWorker {
   static current: FakeWorker | null = null;
@@ -83,5 +83,31 @@ describe("enclave message ownership", () => {
     worker.onmessageerror?.();
     await rejection;
     expect(worker.terminated).toBe(true);
+  });
+  it("gives each queued operation its own execution deadline rather than timing out behind valid work", async () => {
+    vi.useFakeTimers();
+    const first = enclave.hash.sha256Hex("first");
+    const second = enclave.hash.sha256Hex("second");
+    const worker = currentWorker();
+    const [a, b] = worker.requests;
+    worker.reply({ id: a.id, started: true });
+    await vi.advanceTimersByTimeAsync(110_000);
+    worker.reply({ id: a.id, ok: true, result: "first" });
+    worker.reply({ id: b.id, started: true });
+    await vi.advanceTimersByTimeAsync(110_000);
+    expect(worker.terminated).toBe(false);
+    worker.reply({ id: b.id, ok: true, result: "second" });
+    await expect(first).resolves.toBe("first");
+    await expect(second).resolves.toBe("second");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it("aborts captured HTTP/crypto scopes when a session terminates", () => {
+    const old = captureEnclaveScope();
+    terminateEnclave();
+    expect(old.signal.aborted).toBe(true);
+    expect(old.assertCurrent).toThrow("enclave:enclave_crashed");
+    const fresh = captureEnclaveScope();
+    expect(fresh.signal.aborted).toBe(false);
+    expect(fresh.assertCurrent).not.toThrow();
   });
 });
