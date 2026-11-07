@@ -34,3 +34,7 @@ use the editor.
 - Preserve managed project metadata, generated integrations, and auth attachment when importing source so this project keeps its own identity.
 - Keep imported compiler options and MDX compilation while retaining the managed deployment target so source code compiles in this environment.
 - Never copy source credentials or apply external database scripts automatically; original accounts and services require explicit compatible configuration.
+
+## Browser cryptography
+- Browser encryption, protocol verification and private-key operations use the existing typed crypto-enclave worker with ordered requests, transferred buffers and no UI fallback; shared crypto helpers may still run in server-only handlers. Why: preserves ciphertext compatibility without exposing derived keys to React.
+- Zero-fill owned secret/plaintext byte views in finally, hold pending master keys non-extractably and retain vault configuration only as ciphertext; recovery strings/WebAuthn input and engine-internal copies are not erasable or XSS-isolated. Why: cleanup must be testable without claiming a hardware enclave.

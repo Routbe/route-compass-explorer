@@ -7,16 +7,33 @@
  */
 import { isEnclaveOp, runEnclaveOp } from "./enclave-core";
 import type { EnclaveRequest, EnclaveResponse } from "./protocol";
+import { wipeMessage } from "@/lib/crypto/wipe";
 
 declare const self: DedicatedWorkerGlobalScope;
 
-self.onmessage = async (event: MessageEvent<EnclaveRequest>) => {
+// Ordered execution prevents identity creation, key activation and locking
+// from overtaking each other across asynchronous Web Crypto operations.
+let queue = Promise.resolve();
+self.onmessage = (event: MessageEvent<EnclaveRequest>) => {
   const msg = event.data as Partial<EnclaveRequest> | null;
-  if (!msg || typeof msg.id !== "number" || !isEnclaveOp(msg.op)) return;
-  const outcome = await runEnclaveOp(msg.op, msg.args);
-  const response: EnclaveResponse = { id: msg.id, ...outcome };
-  // Decrypted bytes are transferred (moved), so no copy lingers in the worker.
-  const transfer: Transferable[] = [];
-  if (outcome.ok && (msg.op === "data.open" || msg.op === "protocol.openEvent")) transfer.push((outcome.result as { plaintext: Uint8Array }).plaintext.buffer as ArrayBuffer);
-  self.postMessage(response, transfer);
+  if (!msg || !Number.isSafeInteger(msg.id) || !isEnclaveOp(msg.op)) {
+    wipeMessage(msg);
+    return;
+  }
+  const id = msg.id as number;
+  const op = msg.op;
+  queue = queue.then(async () => {
+    const outcome = await runEnclaveOp(op, msg.args);
+    const response: EnclaveResponse = { id, ...outcome };
+    const transfer: Transferable[] = [];
+    if (outcome.ok && (op === "data.open" || op === "protocol.openEvent")) transfer.push((outcome.result as { plaintext: Uint8Array }).plaintext.buffer as ArrayBuffer);
+    try {
+      self.postMessage(response, transfer);
+    } finally {
+      wipeMessage(response); // detached on success; zero-filled on send failure
+    }
+  }).catch(() => {
+    // A failed send must not break the queue or expose internal error content.
+    try { self.postMessage({ id, ok: false, code: "internal" } satisfies EnclaveResponse); } catch { /* receiver is gone */ }
+  });
 };

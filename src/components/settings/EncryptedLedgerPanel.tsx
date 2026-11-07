@@ -54,15 +54,17 @@ export function EncryptedLedgerPanel() {
     try { await task(); } catch (e) { setError(enclaveMessage(e)); } finally { setBusy(false); }
   }
   async function prepare() {
-    let prf: Uint8Array | undefined;
     setPrfCredential(null);
     if (usePrf) {
-      // WebAuthn only exists on the UI thread; the PRF output is moved into the enclave immediately.
-      const result = await (await import("@/lib/ledger/prf")).ledgerPrf();
+      // React receives only the draft and public credential ID, never PRF key bytes.
+      const result = await (await import("@/lib/ledger/prf")).generateLedgerWithPasskey();
       if (!result) throw new Error("Deze passkey ondersteunt geen PRF. Kies herstelcode of een geschikte passkey.");
-      prf = result.output; setPrfCredential(result.credentialId);
+      setPrfCredential(result.credentialId);
+      setPending(result.draft);
+    } else {
+      setPending(await enclave.ledger.generate());
     }
-    setPending(await enclave.ledger.generate(prf)); setAcknowledged(false);
+    setAcknowledged(false);
   }
   async function activate() {
     if (!pending || !acknowledged) return;
@@ -82,9 +84,8 @@ export function EncryptedLedgerPanel() {
     const envelope = envelopes.find((e) => e.source === (prf ? "prf" : "recovery"));
     if (!envelope) throw new Error("Geen geschikte sleutelenvelop.");
     if (prf) {
-      const result = await (await import("@/lib/ledger/prf")).ledgerPrf(envelope.credentialId);
+      const result = await (await import("@/lib/ledger/prf")).unlockLedgerWithPasskey(envelopeKey.key_id, envelope, envelope.credentialId);
       if (!result) throw new Error("Passkey PRF niet beschikbaar.");
-      await enclave.ledger.unlock(envelopeKey.key_id, envelope, { prf: result.output });
     } else {
       await enclave.ledger.unlock(envelopeKey.key_id, envelope, { recoveryCode: recovery.trim() });
     }

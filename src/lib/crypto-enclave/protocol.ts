@@ -19,14 +19,14 @@ export type LedgerDraft = { keyId: string; publicKey: JsonWebKey; recoveryCode: 
 export interface EnclaveOps {
   /** Import the ephemeral secret (then wipe it), derive the claim proof and keep the vault key. */
   "vault.prepare": { req: { secret: string }; res: { handle: string; claimProof: string } };
-  /** Decrypt + validate the vault payload; plaintext stays in the worker until reseal/discard/expiry. */
+  /** Decrypt + validate; retained configuration is immediately re-sealed inside the worker. */
   "vault.decrypt": { req: { handle: string; vaultId: string; blob: string; expiresAt: string }; res: VaultSummary };
-  /** Re-encrypt the held plaintext with the member's device key, then wipe it. */
+  /** Re-encrypt the held configuration with the member's device key, then wipe it. */
   "vault.reseal": { req: { handle: string; userId: string }; res: SealedForUser };
   "vault.discard": { req: { handle: string }; res: null };
 
   "deviceKey.status": { req: { userId: string }; res: { keyId: string } | null };
-  /** New 24-word Master Key; entropy stays in the worker, only the words are shown to the human. */
+  /** Entropy is wiped before returning; only a non-extractable pending key remains. */
   "masterKey.generate": { req: Record<string, never>; res: { handle: string; mnemonic: string } };
   "masterKey.commitPending": { req: { handle: string; userId: string }; res: { keyId: string } };
   "masterKey.discardPending": { req: { handle: string }; res: null };
@@ -58,6 +58,7 @@ export interface EnclaveOps {
   "protocol.openEvent": { req: { userId: string; event: SignedEvent }; res: { plaintext: Uint8Array } };
   "protocol.dpop": { req: { userId: string; method: string; url: string }; res: { proof: string } };
   "protocol.delegate": { req: { userId: string; grant: CapabilityGrant; parent?: Capability | null }; res: Capability };
+  "protocol.verifyChain": { req: { events: SignedEvent[] }; res: { ok: true } | { ok: false; error: string; at: number } };
 }
 
 export type EnclaveOp = keyof EnclaveOps;

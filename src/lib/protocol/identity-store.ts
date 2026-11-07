@@ -22,8 +22,11 @@ async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
   const db = await openDb();
   try {
     return await new Promise<T>((resolve, reject) => {
-      const req = fn(db.transaction(STORE, mode).objectStore(STORE));
-      req.onsuccess = () => resolve(req.result);
+      const transaction = db.transaction(STORE, mode);
+      const req = fn(transaction.objectStore(STORE));
+      transaction.oncomplete = () => resolve(req.result);
+      transaction.onabort = () => reject(transaction.error ?? new Error("Identity transaction aborted"));
+      transaction.onerror = () => reject(transaction.error);
       req.onerror = () => reject(req.error);
     });
   } finally {

@@ -49,7 +49,13 @@ export async function generateLedgerKeys(prfOutput?: Uint8Array): Promise<Ledger
   const pair = await crypto.subtle.generateKey({ name: "RSA-OAEP", modulusLength: 3072, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" }, true, ["encrypt", "decrypt"]);
   const publicKey = await crypto.subtle.exportKey("jwk", pair.publicKey);
   const keyId = await publicKeyId(publicKey);
-  const recoveryCode = `ROUT-RCVR-${Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+  const recoveryBytes = crypto.getRandomValues(new Uint8Array(32));
+  let recoveryCode: string;
+  try {
+    recoveryCode = `ROUT-RCVR-${Array.from(recoveryBytes, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+  } finally {
+    wipe(recoveryBytes);
+  }
   const recovery = recoveryMaterial(recoveryCode);
   const envelopes: PrivateEnvelope[] = [];
   try {
@@ -85,8 +91,8 @@ export async function unlockLedgerKey(envelope: PrivateEnvelope, keyId: string, 
 export async function encryptLedgerEvent(publicKey: JsonWebKey, payload: unknown): Promise<string> {
   const keyId = await publicKeyId(publicKey);
   const rsa = await crypto.subtle.importKey("jwk", publicKey, { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
-  const keyBytes = crypto.getRandomValues(new Uint8Array(32));
   const plaintext = encode.encode(JSON.stringify(payload));
+  const keyBytes = crypto.getRandomValues(new Uint8Array(32));
   try {
     const key = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt"]);
     const iv = crypto.getRandomValues(new Uint8Array(12));
