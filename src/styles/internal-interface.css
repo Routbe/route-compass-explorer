@@ -1,70 +1,163 @@
-/* Independent workspace materials. Creator deliberately leaves the imported cascade intact. */
+/*
+ * Workspace materials (signed-in tools, Studio and QR only).
+ * - glass: the imported cascade, untouched.
+ * - mechanical: calm opaque surfaces, hairline edges, pill controls; only
+ *   primary actions carry a crisp 2px block shadow and a 2px mechanical press.
+ * Member artwork (profiles, QR, exports, previews) is a scope limit and never restyled.
+ */
 :root {
-  --interface-offset: 4px;
-  --interface-corner: 2px;
-  --interface-ink: oklch(0 0 0);
-  --interface-block-shadow: var(--interface-offset) var(--interface-offset) 0px var(--interface-ink);
   --interface-color-spectrum: conic-gradient(from 0deg, oklch(0.63 0.25 29), oklch(0.97 0.21 110), oklch(0.87 0.29 142), oklch(0.9 0.15 195), oklch(0.45 0.31 264), oklch(0.7 0.32 328), oklch(0.63 0.25 29));
 }
-:root[data-workspace-ui="internal"][data-theme="sovereign"] {
-  --interface-edge: hsl(var(--foreground) / 0.65);
-  --interface-surface: hsl(var(--card));
-  --interface-control: hsl(var(--secondary));
+:root[data-workspace-ui="internal"][data-theme="mechanical"] {
+  --m-radius-surface: 16px;
+  --m-radius-overlay: 14px;
+  --m-radius-field: 10px;
+  --m-radius-pill: 9999px;
+  --m-press: 2px;
+  --m-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --m-surface: hsl(var(--card));
+  --m-overlay: hsl(var(--popover));
+  --m-page: hsl(var(--background));
+  --m-control: hsl(var(--secondary));
+  --m-hover: hsl(var(--foreground) / 0.06);
+  --m-hairline: hsl(var(--foreground) / 0.12);
+  --m-edge: hsl(var(--foreground) / 0.22);
+  --m-action-edge: oklch(0.12 0 0);
+  --m-action-shadow: var(--m-press) var(--m-press) 0 0 oklch(0.12 0 0);
+  --m-selected: hsl(var(--foreground));
+  --m-selected-ink: hsl(var(--background));
+}
+/* Black on black disappears: dark mode casts a dimmed light edge instead. */
+:root.dark[data-workspace-ui="internal"][data-theme="mechanical"] {
+  --m-hairline: hsl(var(--foreground) / 0.11);
+  --m-edge: hsl(var(--foreground) / 0.2);
+  --m-action-edge: hsl(var(--foreground) / 0.55);
+  --m-action-shadow: var(--m-press) var(--m-press) 0 0 hsl(var(--foreground) / 0.32);
+  --m-hover: hsl(var(--foreground) / 0.08);
 }
 
-/* Scope also reaches body portals; the limit preserves user-controlled artwork. */
-@scope (:root[data-workspace-ui="internal"][data-theme="sovereign"]) to ([data-profile-theme], [data-qr-container], [data-interface-artwork], .preview-sheet) {
+@scope (:root[data-workspace-ui="internal"][data-theme="mechanical"]) to ([data-profile-theme], [data-qr-container], [data-interface-artwork], .preview-sheet) {
+  /* 1 — No diffusion anywhere: blur, glow and soft shadows are not part of this material. */
   *, *::before, *::after {
-    filter: none !important;
     backdrop-filter: none !important;
     box-shadow: none !important;
     text-shadow: none !important;
-    transition-property: background-color, color, border-color, opacity, transform !important;
   }
-  :is(.acrylic-card, .spatial-glass, .spatial-dialog, .spatial-sheet, .spatial-track, .spatial-profile-tabs,
-    [class~="bg-card"][class~="border"], [class~="bg-card/50"][class~="border"],
-    [class~="shadow-md"], [class~="shadow-lg"], [class~="shadow-xl"],
-    [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-sonner-toast]) {
-    background: var(--interface-surface) !important;
-    border: 1px solid var(--interface-edge) !important;
-    border-radius: var(--interface-corner) !important;
-    box-shadow: var(--interface-block-shadow) !important;
-  }
+  :is([class*="blur"], [class*="drop-shadow"], [class*="glow"]) { filter: none !important; }
   :is(.glow-card, .acrylic-card, .spatial-glass)::before,
-  :is(.glow-card, .acrylic-card, .spatial-glass)::after { display: none; }
-  :is(header, [class~="bg-background/90"], [class~="bg-background/95"]) { background: hsl(var(--background)) !important; }
-  :is(button, [role="button"], [role="tab"], .spatial-button, .spatial-tab) {
+  :is(.glow-card, .acrylic-card, .spatial-glass)::after { display: none !important; }
+
+  /* 2 — Static surfaces: opaque, hairline, softly rounded, never shadowed. */
+  :is(.acrylic-card, .spatial-glass, .glow-card) {
+    background: var(--m-surface) !important;
     background-image: none !important;
-    border: 1px solid var(--interface-edge) !important;
-    border-radius: var(--interface-corner) !important;
-    box-shadow: var(--interface-block-shadow) !important;
-    transition: background-color 100ms linear, border-color 100ms linear !important;
+    border: 1px solid var(--m-hairline) !important;
+    border-radius: var(--m-radius-surface) !important;
   }
+  :is([class~="bg-card"], [class~="bg-card/50"], [class~="bg-card/60"], [class~="bg-card/70"], [class~="bg-card/80"]):is([class~="border"], [class*="rounded-xl"], [class*="rounded-2xl"]):not(button, a, input) {
+    background: var(--m-surface) !important;
+    background-image: none !important;
+    border-color: var(--m-hairline) !important;
+  }
+  :is(header, footer, [class~="bg-background/80"], [class~="bg-background/90"], [class~="bg-background/95"], .docs-header) {
+    background-color: var(--m-page) !important;
+  }
+
+  /* 3 — Overlays float on a crisp edge, not on a blur. */
+  :is([role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper] > *, [data-sonner-toast]) {
+    background: var(--m-overlay) !important;
+    background-image: none !important;
+    border: 1px solid var(--m-edge) !important;
+  }
+  :is([role="menu"], [role="listbox"], [data-radix-popper-content-wrapper] > *, [data-sonner-toast]) { border-radius: var(--m-radius-overlay) !important; }
+  [role="dialog"]:not([data-hardware-ui][class*="inset-y-0"]):not([class*="inset-x-0"]) { border-radius: calc(var(--m-radius-overlay) + 4px) !important; }
+  [role^="menuitem"], [role="option"] { border-radius: calc(var(--m-radius-overlay) - 6px) !important; filter: none !important; }
+  :is([role^="menuitem"], [role="option"]):is(:focus, [data-highlighted]) { background: var(--m-hover) !important; }
+
+  /* 4 — Controls. Every button is a pill; only primary actions are tactile. */
+  :is(.spatial-button, [data-hardware-ui] button:not([role="tab"]):not([role="switch"]):not([role="checkbox"]):not([role="radio"])) {
+    background-image: none !important;
+    filter: none !important;
+  }
+  .spatial-button {
+    border-radius: var(--m-radius-pill) !important;
+    border: 1px solid var(--m-edge) !important;
+    transition: background-color 120ms var(--m-ease), border-color 120ms var(--m-ease), color 120ms var(--m-ease), translate 90ms var(--m-ease), box-shadow 90ms var(--m-ease) !important;
+  }
+  .spatial-button:is([data-spatial-control="default"], [data-spatial-control="destructive"], [data-spatial-control="matcha"]):not([data-spatial-size="icon"]) {
+    border-color: var(--m-action-edge) !important;
+    box-shadow: var(--m-action-shadow) !important;
+  }
+  .spatial-button:is([data-spatial-control="default"], [data-spatial-control="destructive"], [data-spatial-control="matcha"]):not([data-spatial-size="icon"]):not(:disabled):not([aria-disabled="true"]):active {
+    translate: var(--m-press) var(--m-press);
+    box-shadow: 0 0 0 0 transparent !important;
+  }
+  .spatial-button:is([data-spatial-control="outline"], [data-spatial-control="soft"], [data-spatial-control="secondary"]) {
+    background-color: var(--m-control) !important;
+  }
+  .spatial-button:is([data-spatial-control="outline"], [data-spatial-control="soft"], [data-spatial-control="secondary"]):hover { background-color: hsl(var(--accent)) !important; }
+  .spatial-button:is([data-spatial-control="ghost"], [data-spatial-control="link"]) { border-color: transparent !important; background-color: transparent !important; }
+  .spatial-button[data-spatial-control="ghost"]:hover { background-color: var(--m-hover) !important; }
+  .spatial-button[data-spatial-size="icon"]:not([data-spatial-control="outline"]):not([data-spatial-control="soft"]) { border-color: transparent !important; }
+  .spatial-button[data-spatial-control="link"] { border-radius: 4px !important; }
+  :is(button, [role="button"]):disabled, [aria-disabled="true"] { box-shadow: none !important; translate: none !important; }
+
+  /* Header controls: one quiet pill, icon slots without frames. */
+  .spatial-control-pill { background: var(--m-page) !important; background-image: none !important; border: 1px solid var(--m-hairline) !important; }
+  .spatial-control-slot :is(button, a) { border-color: transparent !important; background: transparent !important; box-shadow: none !important; }
+  .spatial-control-slot > .spatial-indicator { background: var(--m-hover) !important; border: 0 !important; border-radius: var(--m-radius-pill) !important; }
+  .spatial-account-trigger { background: var(--m-page) !important; border: 1px solid var(--m-hairline) !important; }
+
+  /* Segmented tabs: a pill track whose sliding indicator is the filled selection. */
+  .spatial-track {
+    background: var(--m-control) !important;
+    border: 1px solid var(--m-hairline) !important;
+    border-radius: var(--m-radius-pill) !important;
+  }
+  .spatial-tab, .spatial-track [role="tab"] { border-radius: var(--m-radius-pill) !important; border: 0 !important; background: transparent !important; transition: color 140ms var(--m-ease) !important; }
+  .spatial-track .spatial-indicator, .spatial-tab > .spatial-indicator {
+    background: var(--m-selected) !important;
+    border: 0 !important;
+    border-radius: var(--m-radius-pill) !important;
+  }
+  :is(.spatial-tab, [role="tab"]):is([data-state="active"], [aria-selected="true"]) { color: var(--m-selected-ink) !important; }
+  :is(.spatial-tab, [role="tab"]):is([data-state="active"], [aria-selected="true"]) :is(span, svg) { color: inherit !important; }
+  [role="tab"]:not(.spatial-tab) { border-radius: var(--m-radius-pill) !important; }
+  [role="tab"]:not(.spatial-tab):is([data-state="active"], [aria-selected="true"]) { background: var(--m-selected) !important; }
+
+  /* Toggles and choice groups: pills; the chosen one is filled. */
+  :is([role="radio"], [aria-pressed]):is(.spatial-button, [data-state]) { border-radius: var(--m-radius-pill) !important; }
+  :is([aria-pressed="true"], [role="radio"][data-state="checked"], [role="radio"][aria-checked="true"], .spatial-button[data-state="on"]):is(.spatial-button, button) {
+    background: var(--m-selected) !important;
+    border-color: var(--m-selected) !important;
+    color: var(--m-selected-ink) !important;
+  }
+  .spatial-choice-tile { border: 1px solid var(--m-hairline) !important; background: var(--m-surface) !important; background-image: none !important; border-radius: var(--m-radius-field) !important; }
+  .spatial-choice-tile[aria-checked="true"] { border-color: var(--m-selected) !important; outline: 1px solid var(--m-selected); outline-offset: -2px; }
+
+  /* Switches: flat track, flat thumb. */
+  .spatial-switch { background: var(--m-control) !important; border: 1px solid var(--m-edge) !important; }
+  .spatial-switch[data-state="checked"] { background: hsl(var(--primary)) !important; border-color: hsl(var(--primary)) !important; }
+  .spatial-switch-thumb { background: var(--m-page) !important; background-image: none !important; border: 1px solid var(--m-edge) !important; }
+
+  /* Fields: calm wells with a precise edge; focus sharpens the edge, never glows. */
+  :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select, .spatial-input) {
+    background: var(--m-page) !important;
+    background-image: none !important;
+    border: 1px solid var(--m-edge) !important;
+    border-radius: var(--m-radius-field) !important;
+  }
+  .spatial-input > input, .spatial-input > textarea { border: 0 !important; background: transparent !important; }
+  :is(input, textarea, select):focus-visible, .spatial-input:focus-within { border-color: hsl(var(--foreground) / 0.7) !important; }
+
   [data-interface-color] { background-image: var(--interface-color-spectrum) !important; }
-  .spatial-indicator { display: none !important; }
-  :is(button, [role="button"], [role="tab"]):not(.spatial-button):not([data-interface-color]),
-  .spatial-button:is([data-spatial-control="outline"], [data-spatial-control="soft"], [data-spatial-control="ghost"], [data-spatial-control="link"]),
-  .spatial-tab {
-    background-color: var(--interface-control) !important;
-  }
-  :is([role="tab"][aria-selected="true"], [role="tab"][data-state="active"], [aria-pressed="true"], [role="radio"][aria-checked="true"], .spatial-tab[data-state="on"]) {
-    background-color: hsl(var(--foreground)) !important;
-    color: hsl(var(--background)) !important;
-  }
-  :is(.spatial-track, .spatial-profile-tabs) :is(button, [role="tab"]) > span,
-  .spatial-tab :is(span, svg) { color: inherit !important; }
-  :is(button, [role="button"], [role="tab"], .spatial-button, .spatial-tab):not(:disabled):not([aria-disabled="true"]):active {
-    translate: var(--interface-offset) var(--interface-offset) !important;
-    box-shadow: none !important;
-  }
-  :is(button:disabled, [aria-disabled="true"]) { box-shadow: none !important; }
-  :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select, .spatial-input, .spatial-control-pill, .spatial-control-slot) {
-    background: hsl(var(--background)) !important;
-    border: 1px solid var(--interface-edge) !important;
-    border-radius: var(--interface-corner) !important;
-  }
-  :is(button, [role="button"], input, textarea, select, [role="tab"]):focus-visible {
+
+  :is(button, [role="button"], a, input, textarea, select, [role="tab"], [role="switch"]):focus-visible {
     outline: 2px solid hsl(var(--ring)) !important;
-    outline-offset: 3px;
+    outline-offset: 2px;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-workspace-ui="internal"][data-theme="mechanical"] { --m-ease: steps(1, end); }
 }
