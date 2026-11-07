@@ -31,6 +31,7 @@ import { canUseDeveloperTools } from "@/lib/workspace-rules";
 import { getMyAccount } from "@/lib/account.functions";
 import { contextBadge, contextLinks, GLOBAL_ACCOUNT_LINK } from "@/lib/context-menu";
 import { HeaderControl } from "@/components/layout/HeaderControls";
+import { InterfaceThemeSwitcher } from "@/components/settings/InterfaceThemeSwitcher";
 import { spatialHaptic } from "@/lib/spatial-haptics";
 
 /**
@@ -227,6 +228,12 @@ export function ProfileMenu() {
               </a>
             </DropdownMenuItem>
           )}
+          <DropdownMenuSeparator />
+          {/* Keys stay inside the switch so the menu's own roving focus does not steal them. */}
+          <div className="space-y-1.5 px-2 py-1.5" onKeyDown={(event) => event.stopPropagation()}>
+            <p className="text-[11px] font-medium text-muted-foreground">Weergave</p>
+            <InterfaceThemeSwitcher />
+          </div>
 
 
 
