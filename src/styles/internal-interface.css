@@ -38,7 +38,9 @@
     box-shadow: var(--interface-block-shadow) !important;
     transition: background-color 100ms linear, border-color 100ms linear !important;
   }
-  :is(button, [role="button"], [role="tab"]):not(.spatial-button),
+  [data-interface-color] { background-image: var(--interface-color-spectrum) !important; }
+  .spatial-indicator { display: none !important; }
+  :is(button, [role="button"], [role="tab"]):not(.spatial-button):not([data-interface-color]),
   .spatial-button:is([data-spatial-control="outline"], [data-spatial-control="soft"], [data-spatial-control="ghost"], [data-spatial-control="link"]),
   .spatial-tab {
     background-color: var(--interface-control) !important;
