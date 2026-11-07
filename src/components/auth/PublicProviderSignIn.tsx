@@ -18,9 +18,8 @@ export function PublicProviderSignIn({ configured, readiness, disabled }: { conf
     if (provider.kind === "bluesky" || provider.kind === "mastodon") { setFediverse(provider.kind); return; }
     setBusy(provider.id);
     try {
-      const result = provider.kind === "social"
-        ? await authClient.signIn.social({ provider: provider.id as "google" | "github" | "gitlab", callbackURL: POST_AUTH_PATH, errorCallbackURL: "/auth/sign-in?error=provider_rejected" })
-        : await authClient.signIn.oauth2({ providerId: provider.id, callbackURL: POST_AUTH_PATH, errorCallbackURL: "/auth/sign-in?error=provider_rejected" });
+      // Better Auth 1.7 registers generic OIDC providers on the same social endpoint.
+      const result = await authClient.signIn.social({ provider: provider.id, callbackURL: POST_AUTH_PATH, errorCallbackURL: "/auth/sign-in?error=provider_rejected" });
       if (result.error) { toast.error(t("auth.provider.server", { name: provider.label })); return; }
       if (result.data?.url) window.location.assign(result.data.url);
       else toast.error(t("auth.provider.server", { name: provider.label }));
