@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
 import { useCryptoLifecycle } from "@/hooks/useCryptoLifecycle";
-import { enclave, EnclaveError, type SealedForUser, type VaultSummary } from "@/lib/crypto-enclave/client";
+import { captureEnclaveScope, enclave, EnclaveError, type SealedForUser, type VaultSummary } from "@/lib/crypto-enclave/client";
 import { openEphemeralVault } from "@/lib/vault/ephemeral-vault.functions";
 
 type Props = { vaultId: string; secret: string; onCancel: () => void };
@@ -48,12 +48,17 @@ function VaultClaimSession({ vaultId, secret, onCancel }: Props) {
     let cancelled = false;
     let handle: string | null = null;
     let retained = false;
+    const workerScope = captureEnclaveScope();
+    const discard = (id: string) => {
+      try { workerScope.assertCurrent(); } catch { return; }
+      void enclave.vault.discard(id).catch(() => undefined);
+    };
     (async () => {
       try {
         const prepared = await enclave.vault.prepare(secret);
         handle = prepared.handle;
         if (cancelled) {
-          await enclave.vault.discard(prepared.handle);
+          discard(prepared.handle);
           return;
         }
         const res = await openVault({ data: { vaultId, claimProof: prepared.claimProof } });
@@ -73,13 +78,13 @@ function VaultClaimSession({ vaultId, secret, onCancel }: Props) {
             : "Openen mislukt. Probeer het zo opnieuw.",
         );
       } finally {
-        if (handle && !retained) void enclave.vault.discard(handle).catch(() => undefined);
+        if (handle && !retained) discard(handle);
         if (!cancelled) setBusy(false);
       }
     })();
     return () => {
       cancelled = true;
-      if (handle) void enclave.vault.discard(handle).catch(() => undefined);
+      if (handle) discard(handle);
     };
   }, [vaultId, secret, openVault]);
 
@@ -94,12 +99,13 @@ function VaultClaimSession({ vaultId, secret, onCancel }: Props) {
   }, [user]);
 
   // A generated-but-unused Master Key is wiped in the enclave when we leave.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const workerScope = captureEnclaveScope();
+    return () => {
+      try { workerScope.assertCurrent(); } catch { return; }
       if (freshRef.current) void enclave.masterKey.discardPending(freshRef.current).catch(() => undefined);
-    },
-    [],
-  );
+    };
+  }, []);
 
   async function unlockFromPhrase() {
     if (!user) return;

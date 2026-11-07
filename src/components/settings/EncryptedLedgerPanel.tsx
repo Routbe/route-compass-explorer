@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getLedgerKeys, listEncryptedLedger, saveLedgerKeys } from "@/lib/ledger/ledger.functions";
 import { getDisclosureAudit } from "@/lib/security/audit-verifier.functions";
-import { enclave, EnclaveError, type LedgerDraft } from "@/lib/crypto-enclave/client";
+import { captureEnclaveScope, enclave, EnclaveError, type LedgerDraft } from "@/lib/crypto-enclave/client";
 import type { PrivateEnvelope } from "@/lib/ledger/crypto";
 import type { LedgerPublicKey } from "@/lib/ledger/ledger.functions";
 
@@ -58,7 +58,13 @@ function EncryptedLedgerSession() {
   }
   useEffect(() => { void refresh().catch(() => setError("Logboek niet beschikbaar. De nieuwe beveiligingsmigraties moeten actief zijn.")); }, []);
   // Leaving the page locks the ledger: the enclave drops its private keys.
-  useEffect(() => () => { void enclave.ledger.lock().catch(() => undefined); }, []);
+  useEffect(() => {
+    const workerScope = captureEnclaveScope();
+    return () => {
+      try { workerScope.assertCurrent(); } catch { return; }
+      void enclave.ledger.lock().catch(() => undefined);
+    };
+  }, []);
   async function run(task: () => Promise<void>) {
     const scope = capture();
     setBusy(true); setError(null);
