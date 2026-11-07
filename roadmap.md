@@ -36,6 +36,6 @@
 
 ## Current request: Stealth Brutalism landing page
 
-- [ ] Scope crisp borders, hard 4px shadows and mechanical action states to the public gateway only.
-- [ ] Preserve the monospace terminal, ROUT typography, page content and existing navigation.
-- [ ] Verify computed shadows/filters, active displacement and desktop/mobile layout in Chromium.
+- [x] Scope crisp borders, hard 4px shadows and mechanical action states to the public gateway only, including shared portals and preview controls.
+- [x] Preserve the monospace terminal, ROUT typography, page content and existing navigation; remove conflicting hero scale-on-press animation.
+- [x] Verify zero diffuse shadows/filters, exact 4px active displacement, QR changes, menu/dialogs, sign-in navigation and 1280/810/390px layouts in Chromium; 18 existing tests and automatic build checks pass.
