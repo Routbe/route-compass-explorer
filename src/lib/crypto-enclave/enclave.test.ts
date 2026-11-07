@@ -2,7 +2,7 @@
 import "fake-indexeddb/auto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { wipe } from "@/lib/crypto/wipe";
 import { open } from "@/lib/e2ee/crypto";
 import { loadDeviceKey } from "@/lib/e2ee/device-key";
@@ -23,11 +23,20 @@ const code = async (op: EnclaveOp, args: unknown) => {
 
 describe("memory wiping", () => {
   it("overwrites typed arrays and buffers with zeros", () => {
-    const a = new Uint8Array(70_000).map((_, i) => (i % 255) + 1); // spans multiple getRandomValues chunks
+    const a = new Uint8Array(70_000).map((_, i) => (i % 255) + 1);
     const b = crypto.getRandomValues(new Uint8Array(32)).buffer;
     wipe(a, b, null, undefined, new Uint8Array(0));
     expect(a.every((x) => x === 0)).toBe(true);
     expect(new Uint8Array(b).every((x) => x === 0)).toBe(true);
+  });
+  it("wipes only a view's owned range and continues after detached buffers", () => {
+    const detached = new ArrayBuffer(32);
+    structuredClone(detached, { transfer: [detached] });
+    const backing = new Uint8Array([7, 8, 9, 10]);
+    const wide = new Uint16Array([65535, 12345]);
+    wipe(detached, backing.subarray(1, 3), wide);
+    expect([...backing]).toEqual([7, 0, 0, 10]);
+    expect([...wide]).toEqual([0, 0]);
   });
 });
 
@@ -49,7 +58,7 @@ describe("cryptographic enclave", () => {
   it("rejects a wrong secret and unknown handles", async () => {
     const blob = await sealVaultPayload(generateEphemeralSecret(), vaultId, config);
     const { handle } = await call("vault.prepare", { secret: generateEphemeralSecret() });
-    expect(await code("vault.decrypt", { handle, vaultId, blob, expiresAt: "" })).toBe("decrypt_failed");
+    expect(await code("vault.decrypt", { handle, vaultId, blob, expiresAt: new Date(Date.now() + 60_000).toISOString() })).toBe("decrypt_failed");
     expect(await code("vault.reseal", { handle: "nope", userId })).toBe("unknown_handle");
     expect(await code("vault.prepare", { secret: "short" })).toBe("invalid_input");
   });
@@ -61,7 +70,7 @@ describe("cryptographic enclave", () => {
 
     const secret = generateEphemeralSecret();
     const { handle } = await call("vault.prepare", { secret });
-    await call("vault.decrypt", { handle, vaultId, blob: await sealVaultPayload(secret, vaultId, config), expiresAt: "" });
+    await call("vault.decrypt", { handle, vaultId, blob: await sealVaultPayload(secret, vaultId, config), expiresAt: new Date(Date.now() + 60_000).toISOString() });
     const sealed = await call("vault.reseal", { handle, userId });
     expect(sealed.keyId).toBe(keyId);
     expect(sealed.encrypted).not.toContain("TOP-SECRET");
@@ -69,7 +78,8 @@ describe("cryptographic enclave", () => {
 
     const dk = await loadDeviceKey(userId);
     expect(dk?.key.extractable).toBe(false);
-    expect(await open(dk!.key, sealed.encrypted, workspaceConfigAad(userId))).toEqual(config);
+    if (!dk) throw new Error("Device key missing");
+    expect(await open(dk.key, sealed.encrypted, workspaceConfigAad(userId))).toEqual(config);
   });
 
   it("seals UI plaintext and wipes the transferred input", async () => {
@@ -84,6 +94,37 @@ describe("cryptographic enclave", () => {
 
   it("rejects an invalid Master Key phrase", async () => {
     expect(await code("masterKey.unlock", { userId, mnemonic: "not a real phrase" })).toBe("invalid_mnemonic");
+  });
+
+  it("zeroes transferred plaintext even when a malformed request fails before its handler", async () => {
+    const plaintext = new Uint8Array([1, 2, 3]);
+    expect(await code("data.seal", { userId: null, aad: "test", plaintext })).toBe("invalid_input");
+    expect([...plaintext]).toEqual([0, 0, 0]);
+    const prf = new Uint16Array([1234, 5678]);
+    expect(await code("ledger.generate", { prf })).toBe("invalid_input");
+    expect([...prf]).toEqual([0, 0]);
+  });
+
+  it("expires a pending master key after 15 minutes even before timer callbacks run", async () => {
+    const { handle } = await call("masterKey.generate", {});
+    const now = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now + 15 * 60_000 + 1);
+    try {
+      expect(await code("masterKey.commitPending", { handle, userId })).toBe("unknown_handle");
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("rejects expired vaults and discards configuration when device lookup fails", async () => {
+    const secret = generateEphemeralSecret();
+    const blob = await sealVaultPayload(secret, vaultId, config);
+    const expired = await call("vault.prepare", { secret });
+    expect(await code("vault.decrypt", { handle: expired.handle, vaultId, blob, expiresAt: new Date(Date.now() - 1).toISOString() })).toBe("unknown_handle");
+    const active = await call("vault.prepare", { secret });
+    await call("vault.decrypt", { handle: active.handle, vaultId, blob, expiresAt: new Date(Date.now() + 60_000).toISOString() });
+    expect(await code("vault.reseal", { handle: active.handle, userId: "missing-device" })).toBe("no_device_key");
+    expect(await code("vault.reseal", { handle: active.handle, userId })).toBe("unknown_handle");
   });
 
   it("keeps ledger private keys inside and wipes the PRF output", async () => {
@@ -162,6 +203,11 @@ describe("protocol identity in the enclave", () => {
     expect(JSON.stringify(e1)).not.toContain("TOP-SECRET-BIO");
     const opened = await call("protocol.openEvent", { userId, event: e1 });
     expect(JSON.parse(new TextDecoder().decode(opened.plaintext))).toEqual({ bio: "TOP-SECRET-BIO" });
+    wipe(opened.plaintext);
+    expect(await call("protocol.verifyChain", { events: [genesis, e1] })).toEqual({ ok: true });
+    const altered = { ...e1, sig: "A".repeat(86) };
+    expect(await code("protocol.openEvent", { userId, event: altered })).toBe("invalid_input");
+    expect(await call("protocol.verifyChain", { events: [genesis, altered] })).toMatchObject({ ok: false, error: "event_signature_invalid", at: 1 });
 
     const url = "https://rout.be/api/v1/ledger/events";
     const { proof } = await call("protocol.dpop", { userId, method: "POST", url });
