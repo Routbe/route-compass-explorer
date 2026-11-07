@@ -2,7 +2,10 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 const mocks = vi.hoisted(() => ({ get: vi.fn(), terminate: vi.fn(), cancel: vi.fn(async () => {}), clear: vi.fn(), signOut: vi.fn(async () => {}), invalidate: vi.fn(async () => {}), navigate: vi.fn() }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ cancelQueries: mocks.cancel, clear: mocks.clear }) }));
+vi.mock("@tanstack/react-query", () => {
+  const client = { cancelQueries: mocks.cancel, clear: mocks.clear };
+  return { useQueryClient: () => client };
+});
 vi.mock("@tanstack/react-router", () => ({ useRouter: () => ({ invalidate: mocks.invalidate, navigate: mocks.navigate }) }));
 vi.mock("@/lib/auth.functions", () => ({ getSessionUser: mocks.get }));
 vi.mock("@/lib/auth-client", () => ({ authClient: { signOut: mocks.signOut } }));
