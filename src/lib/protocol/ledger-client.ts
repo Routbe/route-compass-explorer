@@ -5,7 +5,7 @@
  */
 import { enclave } from "@/lib/crypto-enclave/client";
 import type { Capability } from "./capabilities";
-import { verifyChain, type SignedEvent } from "./events";
+import type { SignedEvent } from "./events";
 
 type Head = { seq: number; hash: string };
 type ReadResult = { head: Head; events: SignedEvent[] };
@@ -86,7 +86,7 @@ export const ledger = {
       after = events[events.length - 1].seq;
     }
     // Never trust the server's copy: every hash, signature and link is re-checked here.
-    const check = verifyChain(all);
+    const check = await enclave.protocol.verifyChain(all);
     if (!check.ok) throw new LedgerError(check.error, 0);
     const out: Array<{ seq: number; kind: string; author: string; data: T | null }> = [];
     for (const e of all) {

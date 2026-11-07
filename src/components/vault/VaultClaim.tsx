@@ -16,7 +16,8 @@ type Opened = { handle: string; summary: VaultSummary; claimProof: string; expir
  * Zero-knowledge claim of an AI handoff vault. All cryptography runs in the
  * cryptographic enclave worker: it derives the claim proof, decrypts the vault
  * and re-encrypts it with the member's device key. This component only ever
- * holds the public name/description, opaque handles and ciphertext.
+ * holds public metadata, handles and ciphertext, plus user-entered/displayed
+ * recovery material. Browser strings and WebAuthn are not an XSS enclave.
  */
 export function VaultClaim({ vaultId, secret, onCancel }: Props) {
   const { user } = useAuth();
@@ -42,7 +43,10 @@ export function VaultClaim({ vaultId, secret, onCancel }: Props) {
       try {
         const prepared = await enclave.vault.prepare(secret);
         handle = prepared.handle;
-        if (cancelled) return;
+        if (cancelled) {
+          await enclave.vault.discard(prepared.handle);
+          return;
+        }
         const res = await openVault({ data: { vaultId, claimProof: prepared.claimProof } });
         if (cancelled) return;
         if (res.status === "not_found") return setError("Deze overdracht bestaat niet (meer). Kluizen vernietigen zichzelf na 1 uur.");

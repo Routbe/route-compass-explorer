@@ -7,6 +7,7 @@ import type { EnclaveArgs, EnclaveErrorCode, EnclaveOp, EnclaveRequest, EnclaveR
 import type { PrivateEnvelope } from "@/lib/ledger/crypto";
 import type { Capability, CapabilityGrant } from "@/lib/protocol/capabilities";
 import type { EventDraft, SignedEvent } from "@/lib/protocol/events";
+import { wipeMessage } from "@/lib/crypto/wipe";
 
 export type { LedgerDraft, SealedForUser, VaultSummary } from "./protocol";
 
@@ -31,6 +32,14 @@ function rejectAll(code: EnclaveErrorCode) {
   }
 }
 
+/** Drops volatile worker state; persisted non-extractable device keys are unchanged. */
+export function terminateEnclave(code: EnclaveErrorCode = "enclave_crashed"): void {
+  const previous = worker;
+  worker = null;
+  previous?.terminate();
+  rejectAll(code);
+}
+
 function getWorker(): Worker {
   if (worker) return worker;
   if (typeof window === "undefined" || typeof Worker === "undefined") throw new EnclaveError("enclave_unavailable");
@@ -42,17 +51,23 @@ function getWorker(): Worker {
   }
   w.onmessage = (event: MessageEvent<EnclaveResponse>) => {
     const msg = event.data;
+    if (!msg || !Number.isSafeInteger(msg.id) || typeof msg.ok !== "boolean") {
+      wipeMessage(msg);
+      if (worker === w) terminateEnclave();
+      return;
+    }
     const waiter = waiting.get(msg.id);
-    if (!waiter) return;
+    if (!waiter || worker !== w) {
+      wipeMessage(msg);
+      return;
+    }
     waiting.delete(msg.id);
     clearTimeout(waiter.timer);
     if (msg.ok) waiter.resolve(msg.result);
     else waiter.reject(new EnclaveError(msg.code));
   };
-  w.onerror = () => {
-    rejectAll("enclave_crashed");
-    w.terminate();
-    if (worker === w) worker = null;
+  w.onerror = w.onmessageerror = () => {
+    if (worker === w) terminateEnclave();
   };
   worker = w;
   return w;
@@ -64,16 +79,25 @@ export function callEnclave<K extends EnclaveOp>(op: K, args: EnclaveArgs<K>, tr
     try {
       w = getWorker();
     } catch (e) {
+      wipeMessage(args);
       reject(e instanceof EnclaveError ? e : new EnclaveError("enclave_unavailable"));
       return;
     }
     const id = ++seq;
     const timer = setTimeout(() => {
-      waiting.delete(id);
-      reject(new EnclaveError("timeout"));
+      // No late plaintext/key activation may emerge from an abandoned worker.
+      // Already committed IndexedDB writes cannot be rolled back by termination.
+      if (worker === w) terminateEnclave("timeout");
     }, TIMEOUT_MS);
     waiting.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
-    w.postMessage({ id, op, args } as EnclaveRequest, transfer);
+    try {
+      w.postMessage({ id, op, args } as EnclaveRequest, transfer);
+    } catch {
+      waiting.delete(id);
+      clearTimeout(timer);
+      wipeMessage(args);
+      reject(new EnclaveError("invalid_input"));
+    }
   });
 }
 
@@ -125,6 +149,7 @@ export const enclave = {
     sha256Hex: (text: string) => callEnclave("hash.sha256Hex", { text }),
   },
   protocol: {
+    verifyChain: (events: SignedEvent[]) => callEnclave("protocol.verifyChain", { events }),
     identity: (userId: string) => callEnclave("protocol.identity", { userId }),
     /** UI → worker plaintext (transferred), worker → UI a signed, ciphertext-only event. */
     sealEvent: (userId: string, at: { stream: string; seq: number; prev: string | null; kind: string; capId?: string }, data: unknown): Promise<SignedEvent> => {

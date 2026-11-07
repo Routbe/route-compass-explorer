@@ -131,8 +131,9 @@ async function withIdentity<T>(userId: string, fn: (sk: Uint8Array, did: string)
 
 async function storeMaster(userId: string, entropy: Uint8Array) {
   try {
+    const owner = str(userId, 200);
     const k = await workspaceKeyFromMaster(entropy);
-    await saveDeviceKey(userId, k);
+    await saveDeviceKey(owner, k);
     return { keyId: k.keyId };
   } finally {
     wipe(entropy);
@@ -160,9 +161,10 @@ export const handlers: Handlers = {
       discardVault(handle);
       fail("unknown_handle");
     }
-    const pt = await openBytes(slot.key, str(blob, 65536), vaultAad(str(vaultId, 64)));
+    let pt: Uint8Array | null = null;
     let normalized: Uint8Array | null = null;
     try {
+      pt = await openBytes(slot.key, str(blob, 65536), vaultAad(str(vaultId, 64)));
       let raw: unknown;
       try {
         raw = JSON.parse(dec.decode(pt));
@@ -172,12 +174,17 @@ export const handlers: Handlers = {
       const parsed = vaultConfigSchema.safeParse(raw);
       if (!parsed.success) return fail("invalid_config");
       normalized = enc.encode(JSON.stringify(parsed.data));
-      slot.sealedConfig = await sealBytes(slot.key, normalized, `rout.enclave.pending.v1:${handle}`);
+      const sealedConfig = await sealBytes(slot.key, normalized, `rout.enclave.pending.v1:${handle}`);
+      if (vaults.get(handle) !== slot || Math.min(expiry, slot.expiresAt) <= Date.now()) fail("unknown_handle");
+      slot.sealedConfig = sealedConfig;
       slot.expiresAt = Math.min(expiry, slot.expiresAt);
       clearTimeout(slot.timer);
       slot.timer = setTimeout(() => discardVault(handle), Math.max(0, slot.expiresAt - Date.now()));
       const { name, slug, description } = parsed.data;
       return { name, ...(slug ? { slug } : {}), ...(description ? { description } : {}) };
+    } catch (e) {
+      discardVault(handle);
+      throw e;
     } finally {
       wipe(pt, normalized);
     }
@@ -185,12 +192,14 @@ export const handlers: Handlers = {
 
   async "vault.reseal"({ handle, userId }) {
     const slot = vaults.get(str(handle)) ?? fail("unknown_handle");
+    const sealedConfig = slot.sealedConfig;
+    discardVault(handle); // consume before awaiting: a handle can only reseal once
     let plaintext: Uint8Array | null = null;
     try {
       if (slot.expiresAt <= Date.now()) fail("unknown_handle");
-      if (!slot.sealedConfig) fail("invalid_input");
+      if (!sealedConfig) return fail("invalid_input");
       const dk = await deviceKeyFor(userId);
-      plaintext = await openBytes(slot.key, slot.sealedConfig, `rout.enclave.pending.v1:${handle}`);
+      plaintext = await openBytes(slot.key, sealedConfig, `rout.enclave.pending.v1:${handle}`);
       return { encrypted: await sealBytes(dk.key, plaintext, workspaceConfigAad(userId)), keyId: dk.keyId };
     } finally {
       wipe(plaintext);
@@ -361,9 +370,12 @@ export const handlers: Handlers = {
   },
 
   async "protocol.openEvent"({ userId, event }) {
+    const verified = verifyEvent(event, event?.ts ?? 0);
+    if (!verified.ok) fail("invalid_input");
     const blob = event?.body?.sealed?.blob;
     if (!isStreamId(event?.stream) || typeof blob !== "string") fail("invalid_input");
     const dk = await deviceKeyFor(userId);
+    if (event.body.sealed?.keyId !== dk.keyId) fail("decrypt_failed");
     return { plaintext: await openBytes(dk.key, str(blob, 70000), eventAad(event.stream, str(event.kind, 64))) };
   },
 

@@ -5,6 +5,7 @@
  * new one is prepared right after taking.
  */
 import { getAltchaChallenge } from "@/lib/altcha.functions";
+import { enclave } from "@/lib/crypto-enclave/client";
 
 type Challenge = { algorithm: string; challenge: string; salt: string; signature: string; maxnumber: number; hard: boolean };
 
@@ -13,8 +14,7 @@ let cached: { proof: string; expiresAt: number } | null = null;
 let pending: Promise<string> | null = null;
 
 async function sha256Hex(value: string) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  return enclave.hash.sha256Hex(value);
 }
 
 function solveInWorker(ch: Challenge): Promise<number | null> {
@@ -38,16 +38,9 @@ function solveInWorker(ch: Challenge): Promise<number | null> {
   });
 }
 
-async function solveOnMainThread(ch: Challenge): Promise<number | null> {
-  for (let n = 0; n <= ch.maxnumber; n++) {
-    if ((await sha256Hex(ch.salt + n)) === ch.challenge) return n;
-  }
-  return null;
-}
-
 async function solve(ch: Challenge): Promise<string> {
   const started = Date.now();
-  const number = await solveInWorker(ch).catch(() => solveOnMainThread(ch));
+  const number = await solveInWorker(ch);
   if (number === null) throw new Error("altcha_unsolved");
   const { hard: _hard, maxnumber: _max, ...rest } = ch;
   return btoa(JSON.stringify({ ...rest, number, took: Date.now() - started }));

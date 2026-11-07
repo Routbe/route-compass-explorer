@@ -10,7 +10,6 @@ import type { SealedBlob } from "@/lib/e2ee/crypto";
 import type { PrivateEnvelope } from "@/lib/ledger/crypto";
 import type { Capability, CapabilityGrant } from "@/lib/protocol/capabilities";
 import type { EventDraft, SignedEvent } from "@/lib/protocol/events";
-import type { WorkspaceKey } from "@/lib/e2ee/device-key";
 
 /** Public metadata of a decrypted handoff; the full config stays inside the worker. */
 export type VaultSummary = { name: string; slug?: string; description?: string };
