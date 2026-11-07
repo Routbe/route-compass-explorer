@@ -39,3 +39,9 @@
 - [x] Scope crisp borders, hard 4px shadows and mechanical action states to the public gateway only, including shared portals and preview controls.
 - [x] Preserve the monospace terminal, ROUT typography, page content and existing navigation; remove conflicting hero scale-on-press animation.
 - [x] Verify zero diffuse shadows/filters, exact 4px active displacement, QR changes, menu/dialogs, sign-in navigation and 1280/810/390px layouts in Chromium; 18 existing tests and automatic build checks pass.
+
+## Current request: restore public login options and Google Wallet design
+
+- [ ] Compare original provider catalog and restore all public sign-in choices without replacing existing identities or weakening readiness checks.
+- [ ] Diagnose Google Wallet logo/art serving and existing-pass updates; correct verified design-delivery failures.
+- [ ] Run targeted auth/Wallet regressions and verify public UI/image paths; name remaining credential or real-device blockers.
