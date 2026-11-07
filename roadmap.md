@@ -14,6 +14,13 @@
 
 ## Current request: isolated browser cryptography
 
+### Follow-up: correctness review and remaining hardening
+
+- [x] Re-audit worker execution, secret-buffer ownership, expiry and account/UI lifecycle.
+- [x] Fix verified memory, queue timeout, account-switch, stale UI completion and passkey cancellation gaps while preserving ciphertext and account behavior.
+- [x] Expand to 83 behavioral tests; rerun Chromium cryptography, independently encrypted vault round trip, cancellation and restart with the UI crypto API disabled.
+- [x] Recheck successful automatic build/type diagnostics and confirm production/auth verification blockers remain external.
+
 - [x] Audit client cryptography and preserve ciphertext/storage compatibility.
 - [x] Harden the existing dedicated worker, remove main-thread hash fallback and keep PRF bytes out of React.
 - [x] Overwrite owned sensitive byte buffers on success and failure; document browser limitations.

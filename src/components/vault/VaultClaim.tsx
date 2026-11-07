@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/hooks/useAuth";
-import { enclave, EnclaveError, type SealedForUser, type VaultSummary } from "@/lib/crypto-enclave/client";
+import { useCryptoLifecycle } from "@/hooks/useCryptoLifecycle";
+import { captureEnclaveScope, enclave, EnclaveError, type SealedForUser, type VaultSummary } from "@/lib/crypto-enclave/client";
 import { openEphemeralVault } from "@/lib/vault/ephemeral-vault.functions";
 
 type Props = { vaultId: string; secret: string; onCancel: () => void };
@@ -19,8 +20,14 @@ type Opened = { handle: string; summary: VaultSummary; claimProof: string; expir
  * holds public metadata, handles and ciphertext, plus user-entered/displayed
  * recovery material. Browser strings and WebAuthn are not an XSS enclave.
  */
-export function VaultClaim({ vaultId, secret, onCancel }: Props) {
+export function VaultClaim(props: Props) {
   const { user } = useAuth();
+  return <VaultClaimSession key={`${user?.id ?? "signed-out"}:${props.vaultId}:${props.secret}`} {...props} />;
+}
+
+function VaultClaimSession({ vaultId, secret, onCancel }: Props) {
+  const { user } = useAuth();
+  const { capture } = useCryptoLifecycle();
   const openVault = useServerFn(openEphemeralVault);
   const [opened, setOpened] = useState<Opened | null>(null);
   const [deviceKeyId, setDeviceKeyId] = useState<string | null>(null);
@@ -31,7 +38,8 @@ export function VaultClaim({ vaultId, secret, onCancel }: Props) {
   const [wroteDown, setWroteDown] = useState(false);
   const [done, setDone] = useState<{ slug: string } | null>(null);
   // Ciphertext kept for a retry after a network error; never plaintext.
-  const sealedRef = useRef<SealedForUser | null>(null);
+  const sealedRef = useRef<{ ownerId: string; vaultId: string; sealed: SealedForUser } | null>(null);
+  const operation = useRef(false);
   const freshRef = useRef<string | null>(null);
   freshRef.current = fresh?.handle ?? null;
 
@@ -39,12 +47,18 @@ export function VaultClaim({ vaultId, secret, onCancel }: Props) {
   useEffect(() => {
     let cancelled = false;
     let handle: string | null = null;
+    let retained = false;
+    const workerScope = captureEnclaveScope();
+    const discard = (id: string) => {
+      try { workerScope.assertCurrent(); } catch { return; }
+      void enclave.vault.discard(id).catch(() => undefined);
+    };
     (async () => {
       try {
         const prepared = await enclave.vault.prepare(secret);
         handle = prepared.handle;
         if (cancelled) {
-          await enclave.vault.discard(prepared.handle);
+          discard(prepared.handle);
           return;
         }
         const res = await openVault({ data: { vaultId, claimProof: prepared.claimProof } });
@@ -52,7 +66,10 @@ export function VaultClaim({ vaultId, secret, onCancel }: Props) {
         if (res.status === "not_found") return setError("Deze overdracht bestaat niet (meer). Kluizen vernietigen zichzelf na 1 uur.");
         if (res.status === "invalid") return setError("Deze code past niet bij de kluis. Controleer elk teken.");
         const summary = await enclave.vault.decrypt(prepared.handle, vaultId, res.encryptedPayload, res.expiresAt);
-        if (!cancelled) setOpened({ handle: prepared.handle, summary, claimProof: prepared.claimProof, expiresAt: res.expiresAt });
+        if (!cancelled) {
+          retained = true;
+          setOpened({ handle: prepared.handle, summary, claimProof: prepared.claimProof, expiresAt: res.expiresAt });
+        }
       } catch (e) {
         if (cancelled) return;
         setError(
@@ -61,77 +78,105 @@ export function VaultClaim({ vaultId, secret, onCancel }: Props) {
             : "Openen mislukt. Probeer het zo opnieuw.",
         );
       } finally {
+        if (handle && !retained) discard(handle);
         if (!cancelled) setBusy(false);
       }
     })();
     return () => {
       cancelled = true;
-      if (handle) void enclave.vault.discard(handle).catch(() => undefined);
+      if (handle) discard(handle);
     };
   }, [vaultId, secret, openVault]);
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     void enclave.deviceKey
       .status(user.id)
-      .then((k) => setDeviceKeyId(k?.keyId ?? null))
-      .catch(() => setDeviceKeyId(null));
+      .then((k) => { if (!cancelled) setDeviceKeyId(k?.keyId ?? null); })
+      .catch(() => { if (!cancelled) setDeviceKeyId(null); });
+    return () => { cancelled = true; };
   }, [user]);
 
   // A generated-but-unused Master Key is wiped in the enclave when we leave.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const workerScope = captureEnclaveScope();
+    return () => {
+      try { workerScope.assertCurrent(); } catch { return; }
       if (freshRef.current) void enclave.masterKey.discardPending(freshRef.current).catch(() => undefined);
-    },
-    [],
-  );
+    };
+  }, []);
 
   async function unlockFromPhrase() {
     if (!user) return;
+    const scope = capture();
     setError(null);
     try {
       const { keyId } = await enclave.masterKey.unlock(user.id, phrase);
+      scope.assertCurrent();
       setPhrase("");
       setDeviceKeyId(keyId);
     } catch {
+      if (!scope.isUiCurrent()) return;
       setError("Ongeldige Master Key. Controleer de 24 woorden.");
     }
   }
 
   async function confirmFresh() {
     if (!user || !fresh) return;
+    const scope = capture();
     setError(null);
     try {
       const { keyId } = await enclave.masterKey.commitPending(fresh.handle, user.id);
+      scope.assertCurrent();
       setFresh(null);
       setDeviceKeyId(keyId);
     } catch {
+      if (!scope.isUiCurrent()) return;
       setFresh(null);
       setError("Deze Master Key is verlopen. Maak een nieuwe aan.");
     }
   }
 
   async function makeFresh() {
+    if (operation.current) return;
+    operation.current = true;
+    const scope = capture();
     setError(null);
     try {
-      setFresh(await enclave.masterKey.generate());
+      const generated = await enclave.masterKey.generate();
+      if (!scope.isCurrent()) {
+        void enclave.masterKey.discardPending(generated.handle).catch(() => undefined);
+        return;
+      }
+      if (freshRef.current) void enclave.masterKey.discardPending(freshRef.current).catch(() => undefined);
+      freshRef.current = generated.handle;
+      setFresh(generated);
       setWroteDown(false);
     } catch {
+      if (!scope.isUiCurrent()) return;
       setError("Kon geen Master Key maken. Probeer opnieuw.");
+    } finally {
+      operation.current = false;
     }
   }
 
   // Step C + commit: the enclave re-encrypts with the member's key; only ciphertext is sent.
   async function commit() {
-    if (!user || !opened || !deviceKeyId) return;
+    if (!user || !opened || !deviceKeyId || operation.current) return;
+    operation.current = true;
+    const scope = capture();
     setBusy(true);
     setError(null);
     try {
-      const sealed = sealedRef.current ?? (await enclave.vault.reseal(opened.handle, user.id));
-      sealedRef.current = sealed;
+      const cached = sealedRef.current;
+      const sealed = cached?.ownerId === user.id && cached.vaultId === vaultId ? cached.sealed : await enclave.vault.reseal(opened.handle, user.id);
+      scope.assertCurrent();
+      sealedRef.current = { ownerId: user.id, vaultId, sealed };
       const res = await fetch("/api/v1/workspaces/commit", {
         method: "POST",
         credentials: "same-origin",
+        signal: scope.signal,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           vault_id: vaultId,
@@ -143,6 +188,7 @@ export function VaultClaim({ vaultId, secret, onCancel }: Props) {
         }),
       });
       const body = (await res.json().catch(() => ({}))) as { slug?: string; error?: string };
+      scope.assertCurrent();
       if (!res.ok || !body.slug) {
         setError(
           body.error === "vault_not_found" ? "Deze overdracht is verlopen of al geclaimd."
@@ -156,13 +202,15 @@ export function VaultClaim({ vaultId, secret, onCancel }: Props) {
       setOpened(null);
       setDone({ slug: body.slug });
     } catch (e) {
+      if (!scope.isUiCurrent()) return;
       setError(
         e instanceof EnclaveError && e.code === "no_device_key" ? "Ontgrendel eerst je Master Key."
         : e instanceof EnclaveError && e.code === "unknown_handle" ? "De kluis is verlopen in deze browser. Open de link opnieuw."
         : "Claimen mislukt. Probeer opnieuw.",
       );
     } finally {
-      setBusy(false);
+      operation.current = false;
+      if (scope.isUiCurrent()) setBusy(false);
     }
   }
 

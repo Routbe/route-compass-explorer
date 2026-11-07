@@ -6,6 +6,7 @@
  */
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { concat, fromBase58, toBase58, utf8 } from "./encoding";
+import { wipe } from "@/lib/crypto/wipe";
 
 const ED25519_PREFIX = new Uint8Array([0xed, 0x01]);
 const DID_RE = /^did:key:z[1-9A-HJ-NP-Za-km-z]{40,60}$/;
@@ -54,7 +55,12 @@ export function verifyDigest(did: string, domain: SignDomain, digest: Uint8Array
 
 export function newIdentityKey(): { secretKey: Uint8Array; did: string } {
   const secretKey = ed25519.utils.randomSecretKey();
-  return { secretKey, did: didFromPublicKey(ed25519.getPublicKey(secretKey)) };
+  try {
+    return { secretKey, did: didFromPublicKey(ed25519.getPublicKey(secretKey)) };
+  } catch (error) {
+    wipe(secretKey);
+    throw error;
+  }
 }
 
 export const didOfSecretKey = (secretKey: Uint8Array): string => didFromPublicKey(ed25519.getPublicKey(secretKey));

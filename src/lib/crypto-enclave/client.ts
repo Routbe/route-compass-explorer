@@ -18,11 +18,23 @@ export class EnclaveError extends Error {
 }
 
 const TIMEOUT_MS = 120_000; // RSA-3072 generation on slow phones can take a while
-type Waiter = { resolve: (v: unknown) => void; reject: (e: EnclaveError) => void; timer: ReturnType<typeof setTimeout> };
+type Waiter = { resolve: (v: unknown) => void; reject: (e: EnclaveError) => void; timer: ReturnType<typeof setTimeout>; started: boolean; owner: Worker };
 
 let worker: Worker | null = null;
 let seq = 0;
+let epoch = 0;
+let cancellation: AbortController | null = null;
 const waiting = new Map<number, Waiter>();
+
+/** Fence asynchronous UI/HTTP continuations across account changes or worker termination. */
+export function captureEnclaveScope() {
+  if (!cancellation) cancellation = new AbortController();
+  const at = epoch;
+  return {
+    signal: cancellation.signal,
+    assertCurrent: () => { if (at !== epoch) throw new EnclaveError("enclave_crashed"); },
+  };
+}
 
 function rejectAll(code: EnclaveErrorCode) {
   for (const [id, w] of waiting) {
@@ -34,10 +46,25 @@ function rejectAll(code: EnclaveErrorCode) {
 
 /** Drops volatile worker state; persisted non-extractable device keys are unchanged. */
 export function terminateEnclave(code: EnclaveErrorCode = "enclave_crashed"): void {
+  epoch++;
+  cancellation?.abort();
+  cancellation = null;
   const previous = worker;
   worker = null;
   previous?.terminate();
   rejectAll(code);
+}
+
+function deadline(w: Worker) {
+  return setTimeout(() => { if (worker === w) terminateEnclave("timeout"); }, TIMEOUT_MS);
+}
+
+function queueProgress(w: Worker) {
+  for (const waiter of waiting.values()) {
+    if (waiter.owner !== w || waiter.started) continue;
+    clearTimeout(waiter.timer);
+    waiter.timer = deadline(w);
+  }
 }
 
 function getWorker(): Worker {
@@ -51,7 +78,8 @@ function getWorker(): Worker {
   }
   w.onmessage = (event: MessageEvent<EnclaveResponse>) => {
     const msg = event.data;
-    if (!msg || !Number.isSafeInteger(msg.id) || typeof msg.ok !== "boolean") {
+    if (worker !== w) { wipeMessage(msg); return; }
+    if (!msg || !Number.isSafeInteger(msg.id) || (!("started" in msg && msg.started === true) && !("ok" in msg && typeof msg.ok === "boolean"))) {
       wipeMessage(msg);
       if (worker === w) terminateEnclave();
       return;
@@ -59,6 +87,13 @@ function getWorker(): Worker {
     const waiter = waiting.get(msg.id);
     if (!waiter || worker !== w) {
       wipeMessage(msg);
+      return;
+    }
+    queueProgress(w);
+    if ("started" in msg) {
+      clearTimeout(waiter.timer);
+      waiter.started = true;
+      waiter.timer = deadline(w);
       return;
     }
     waiting.delete(msg.id);
@@ -74,6 +109,10 @@ function getWorker(): Worker {
 }
 
 export function callEnclave<K extends EnclaveOp>(op: K, args: EnclaveArgs<K>, transfer: Transferable[] = []): Promise<EnclaveResult<K>> {
+  // Disposal must never recreate a worker after a crash, timeout or logout.
+  if (!worker && (op === "vault.discard" || op === "masterKey.discardPending" || op === "ledger.discardPending" || op === "ledger.lock")) {
+    return Promise.resolve(null as EnclaveResult<K>);
+  }
   return new Promise<EnclaveResult<K>>((resolve, reject) => {
     let w: Worker;
     try {
@@ -84,12 +123,8 @@ export function callEnclave<K extends EnclaveOp>(op: K, args: EnclaveArgs<K>, tr
       return;
     }
     const id = ++seq;
-    const timer = setTimeout(() => {
-      // No late plaintext/key activation may emerge from an abandoned worker.
-      // Already committed IndexedDB writes cannot be rolled back by termination.
-      if (worker === w) terminateEnclave("timeout");
-    }, TIMEOUT_MS);
-    waiting.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
+    const timer = deadline(w);
+    waiting.set(id, { resolve: resolve as (v: unknown) => void, reject, timer, started: false, owner: w });
     try {
       w.postMessage({ id, op, args } as EnclaveRequest, transfer);
     } catch {

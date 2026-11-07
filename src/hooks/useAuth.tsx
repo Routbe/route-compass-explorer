@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { getSessionUser, type AuthUser } from "@/lib/auth.functions";
@@ -7,6 +7,7 @@ import { syncSignupProfile } from "@/lib/signup-profile.functions";
 import { claimReferral } from "@/lib/referral.functions";
 import { clearReferrer, readReferrer } from "@/lib/referral";
 import { withAuthTimeout, AUTH_GUARD_TIMEOUT_MS } from "@/lib/auth-timeout";
+import { terminateEnclave } from "@/lib/crypto-enclave/client";
 
 /**
  * Session state for ROUT's self-hosted Better Auth layer.
@@ -69,25 +70,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [available, setAvailable] = useState(true);
   const queryClient = useQueryClient();
   const router = useRouter();
+  const generation = useRef(0);
+  const currentOwner = useRef<string | null>(null);
+  const signingOut = useRef(false);
 
   const refresh = useCallback(async () => {
+    if (signingOut.current) return;
+    const request = ++generation.current;
     try {
       const next = await withAuthTimeout(getSessionUser(), "session", AUTH_GUARD_TIMEOUT_MS);
+      if (request !== generation.current || signingOut.current) return;
+      if (currentOwner.current !== (next?.id ?? null)) {
+        terminateEnclave();
+        queryClient.clear();
+      }
+      currentOwner.current = next?.id ?? null;
       setUser(next);
       setAvailable(true);
       if (next) void flushPostSignIn(next);
     } catch {
+      if (request !== generation.current || signingOut.current) return;
       setAvailable(false);
     } finally {
-      setLoading(false);
+      if (request === generation.current) setLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const signOut = useCallback(async () => {
+    signingOut.current = true;
+    generation.current++;
+    currentOwner.current = null;
+    terminateEnclave(); // synchronously abort crypto/HTTP continuations before network logout
+    setUser(null);
     // Order matters: stop in-flight requests and drop cached private data
     // before the cookie disappears, so nothing 401s or survives the back button.
     await queryClient.cancelQueries();
@@ -97,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authClient.signOut();
     } catch {
-      /* the cookie is cleared server-side; a network hiccup must not trap the user */
+      /* Local state is locked; a failed request does not prove server-cookie clearance. */
     }
     try {
       // Eigen sessiekoekje (Bluesky-aanmelding) apart wissen.
@@ -106,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* idem: netwerkfout mag het uitloggen niet blokkeren */
     }
     setUser(null);
+    signingOut.current = false;
     await router.invalidate();
     const path = typeof window === "undefined" ? "/" : window.location.pathname;
     if (PROTECTED_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`))) {

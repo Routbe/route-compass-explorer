@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { wipe, wipeMessage } from "@/lib/crypto/wipe";
 import { open } from "@/lib/e2ee/crypto";
 import { loadDeviceKey } from "@/lib/e2ee/device-key";
+import * as deviceKeys from "@/lib/e2ee/device-key";
 import { encryptLedgerEvent } from "@/lib/ledger/crypto";
 import { generateEphemeralSecret, sealVaultPayload, vaultClaimProof, workspaceConfigAad } from "@/lib/vault/ephemeral-vault";
 import { runEnclaveOp } from "./enclave-core";
@@ -137,6 +138,36 @@ describe("cryptographic enclave", () => {
     expect(await code("vault.reseal", { handle: active.handle, userId: "missing-device" })).toBe("no_device_key");
     expect(await code("vault.reseal", { handle: active.handle, userId })).toBe("unknown_handle");
   });
+  it("never emits generic ciphertext too large for the existing open/storage format", async () => {
+    const plaintext = new Uint8Array(49120).fill(65);
+    const sealed = await call("data.seal", { userId, aad: "boundary", plaintext });
+    expect(plaintext.every((b) => b === 0)).toBe(true);
+    const back = await call("data.open", { userId, aad: "boundary", blob: sealed.encrypted });
+    expect(back.plaintext.length).toBe(49120);
+    expect(back.plaintext[0]).toBe(65);
+    wipe(back.plaintext);
+    const excess = new Uint8Array(49121).fill(66);
+    expect(await code("data.seal", { userId, aad: "boundary", plaintext: excess })).toBe("invalid_input");
+    expect(excess.every((b) => b === 0)).toBe(true);
+  });
+  it("rejects resealing that crosses the vault deadline while a device lookup is pending", async () => {
+    const secret = generateEphemeralSecret();
+    const { handle } = await call("vault.prepare", { secret });
+    const now = Date.now();
+    await call("vault.decrypt", { handle, vaultId, blob: await sealVaultPayload(secret, vaultId, config), expiresAt: new Date(now + 60_000).toISOString() });
+    const dk = await loadDeviceKey(userId);
+    let release: ((value: typeof dk) => void) | undefined;
+    const lookup = vi.spyOn(deviceKeys, "loadDeviceKey").mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    const pending = code("vault.reseal", { handle, userId });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now + 60_001);
+    try {
+      release?.(dk);
+      expect(await pending).toBe("unknown_handle");
+      expect(await code("vault.reseal", { handle, userId })).toBe("unknown_handle");
+    } finally {
+      clock.mockRestore(); lookup.mockRestore();
+    }
+  });
 
   it("keeps ledger private keys inside and wipes the PRF output", async () => {
     const prf = crypto.getRandomValues(new Uint8Array(32));
@@ -204,6 +235,11 @@ describe("protocol identity in the enclave", () => {
 
     const stream = newStreamId();
     const genesis = await call("protocol.signEvent", { userId, draft: { stream, seq: 0, prev: null, kind: "stream.genesis", body: {} } });
+    for (const invalid of [{ kind: "invalid", prev: genesis.hash }, { kind: "profile.patch", prev: null }]) {
+      const plaintext = new Uint8Array([123, 125]);
+      expect(await code("protocol.sealEvent", { userId, stream, seq: 1, ...invalid, plaintext })).toBe("invalid_input");
+      expect([...plaintext]).toEqual([0, 0]);
+    }
     expect(await code("protocol.signEvent", { userId, draft: { stream, seq: 1, prev: genesis.hash, kind: "profile.patch", body: { public: { bio: "x" } } } })).toBe("invalid_input");
 
     const plaintext = new TextEncoder().encode(JSON.stringify({ bio: "TOP-SECRET-BIO" }));

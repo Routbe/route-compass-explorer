@@ -80,5 +80,6 @@ export type EnclaveErrorCode =
   | "internal";
 
 export type EnclaveResponse =
+  | { id: number; started: true }
   | { id: number; ok: true; result: unknown }
   | { id: number; ok: false; code: EnclaveErrorCode };
