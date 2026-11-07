@@ -40,5 +40,5 @@ use the editor.
 - Zero-fill owned secret/plaintext byte views in finally, hold pending master keys non-extractably and retain vault configuration only as ciphertext; recovery strings/WebAuthn input and engine-internal copies are not erasable or XSS-isolated. Why: cleanup must be testable without claiming a hardware enclave.
 - Worker dispatch announces execution start for per-operation deadlines; auth changes terminate volatile state and invalidate captured crypto/HTTP scopes, while owner-keyed UI sessions reject stale completions and preserve persisted device keys. Why: logout, queue delays and late replies must not revive keys or another owner's plaintext.
 
-## Public gateway presentation
-- Scope gateway material overrides to `.infra-home` and its active body/portals, leaving shared component variants and internal/member-profile materials intact. Why: landing-page styling must not change private workflows or imported profile themes.
+## Interface materials
+- Keep workspace material preferences separate from colour mode; activate root data-theme only for authenticated tools and QR/Studio routes, including their portals, and exclude profile/QR/export artwork. Why: the public gateway retains the imported appearance and Creator restores legacy materials without altering user designs.

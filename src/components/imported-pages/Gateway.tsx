@@ -19,7 +19,8 @@ import {
   Wallet,
   CreditCard,
 } from "lucide-react";
-import { useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
+import { premiumSpringPreset } from "@/lib/spatial-motion";
 import infrastructureImage from "@/assets/rout-infrastructure.jpg";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -191,19 +192,19 @@ export default function Gateway() {
           </div>
 
           <div data-intro className="mt-6 flex w-full max-w-xl flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center">
-            <div><Button asChild size="lg" className="infra-action h-12 w-full gap-2 px-6 text-sm">
+            <motion.div whileTap={reduced ? undefined : { scale: 0.96 }} transition={premiumSpringPreset}><Button asChild size="lg" className="infra-action h-12 w-full gap-2 px-6 text-sm">
               <Link to="/auth">
                 <Fingerprint className="h-4 w-4" /> {t("gateway.claim")}
               </Link>
-            </Button></div>
-            <div><Button
+            </Button></motion.div>
+            <motion.div whileTap={reduced ? undefined : { scale: 0.96 }} transition={premiumSpringPreset}><Button
               size="lg"
               variant="outline"
               className="infra-action h-12 w-full gap-2 px-6 text-sm"
               onClick={() => document.getElementById("ecosystem")?.scrollIntoView({ behavior: reduced ? "instant" : "smooth" })}
             >
               {t("gateway.explore")} <ArrowRight className="h-4 w-4" />
-            </Button></div>
+            </Button></motion.div>
           </div>
 
         </div>
