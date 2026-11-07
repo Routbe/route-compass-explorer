@@ -24,15 +24,15 @@ describe("sign-in gateway policy", () => {
     "/sign-out",
     "/link-social",
     "/callback/google",
+    "/sign-in/social",
+    "/sign-in/oauth2",
   ])("allows %s", (path) => {
     expect(signInPathDecision(path)).toEqual({ allow: true });
   });
 
   it.each([
-    // New accounts only via the passkey sign-up ticket; social only links.
+    // New accounts only via the reviewed passkey sign-up ticket.
     "/sign-up/email",
-    "/sign-in/social",
-    "/sign-in/oauth2",
     "/forget-password",
     "/set-password",
     "/verify-email",
