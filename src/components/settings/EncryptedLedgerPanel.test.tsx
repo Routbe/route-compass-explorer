@@ -23,7 +23,7 @@ describe("ledger plaintext lifecycle", () => {
     let resolve: ((value: Record<string, string>) => void) | undefined;
     mock.decrypt.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
     render(<EncryptedLedgerPanel />);
-    fireEvent.change(await screen.findByRole("textbox", { name: "Logboekherstelcode" }), { target: { value: "provided-code" } });
+    fireEvent.change(await screen.findByLabelText("Logboekherstelcode"), { target: { value: "provided-code" } });
     fireEvent.click(screen.getByRole("button", { name: "Lokaal ontsleutelen" }));
     await waitFor(() => expect(mock.decrypt).toHaveBeenCalled());
     fireEvent.click(await screen.findByRole("button", { name: "Vergrendelen" }));

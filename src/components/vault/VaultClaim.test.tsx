@@ -31,7 +31,7 @@ describe("owner-bound vault cryptography", () => {
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
   const props = { vaultId: "vault-id", secret: "provided-code", onCancel: vi.fn() };
   it("never reuses owner A retry ciphertext after switching to owner B", async () => {
-    const fetcher = vi.fn(async () => ({ ok: false, json: async () => ({ error: "network" }) }));
+    const fetcher = vi.fn(async (_url: string, _options: { body: string }) => ({ ok: false, json: async () => ({ error: "network" }) }));
     vi.stubGlobal("fetch", fetcher);
     const view = render(<VaultClaim {...props} />);
     const button = await screen.findByRole("button", { name: "Versleutelen en claimen" });

@@ -6,7 +6,9 @@
 - Dedicated module worker performs device-key derivation, AES-GCM encryption/decryption, vault handoff, ledger key operations, signing and chain verification. ALTCHA puzzle hashing retains its separate worker with no main-thread fallback.
 - Owned sensitive byte views are zero-filled on success and failure, including malformed messages and failed transfers. Decrypted bytes move back to the display adapter, which zero-fills them after decoding.
 - Pending master keys are non-extractable; entropy is wiped before replying. Pending vault configuration is retained as ciphertext. Absolute deadlines are checked in addition to cleanup timers.
-- Worker requests execute in order. A 120-second total request timeout terminates volatile worker state; it includes queue time. Persisted device-key writes already committed cannot be rolled back by termination.
+- Worker requests execute in order through a tested dispatcher. Execution-start/progress replies give each request its own 120-second execution budget and refresh queued requests' inactivity budget. A genuinely stalled worker is terminated. Persisted device-key writes already committed cannot be rolled back by termination.
+- Logout and observed account changes synchronously terminate volatile crypto state and abort captured HTTP scopes. Persisted device keys remain on this device; logging out is not device erasure. UI sessions are keyed by owner, ignore stale crypto completions, dispose late generated handles, and never reuse another owner's retry ciphertext.
+- Recovery unlock decodes BIP39 entropy only once. Owned Shamir coefficient/share buffers and key-generation failure buffers are zero-filled. Generic encryption rejects input that cannot fit the existing ciphertext format; signed private events pass the same verification as public events before leaving the worker.
 - Existing external ciphertext formats, HKDF labels, AAD and IndexedDB slots remain compatible.
 
 ## Limits
