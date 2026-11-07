@@ -1,0 +1,146 @@
+/**
+ * UI-thread side of the cryptographic enclave. Contains NO crypto: it only
+ * posts typed messages to crypto.worker.ts and resolves the replies. There is
+ * deliberately no main-thread fallback — without a worker, crypto refuses.
+ */
+import type { EnclaveArgs, EnclaveErrorCode, EnclaveOp, EnclaveRequest, EnclaveResponse, EnclaveResult, LedgerDraft, SealedForUser, VaultSummary } from "./protocol";
+import type { PrivateEnvelope } from "@/lib/ledger/crypto";
+import type { Capability, CapabilityGrant } from "@/lib/protocol/capabilities";
+import type { EventDraft, SignedEvent } from "@/lib/protocol/events";
+
+export type { LedgerDraft, SealedForUser, VaultSummary } from "./protocol";
+
+export class EnclaveError extends Error {
+  constructor(readonly code: EnclaveErrorCode) {
+    super(`enclave:${code}`);
+  }
+}
+
+const TIMEOUT_MS = 120_000; // RSA-3072 generation on slow phones can take a while
+type Waiter = { resolve: (v: unknown) => void; reject: (e: EnclaveError) => void; timer: ReturnType<typeof setTimeout> };
+
+let worker: Worker | null = null;
+let seq = 0;
+const waiting = new Map<number, Waiter>();
+
+function rejectAll(code: EnclaveErrorCode) {
+  for (const [id, w] of waiting) {
+    clearTimeout(w.timer);
+    w.reject(new EnclaveError(code));
+    waiting.delete(id);
+  }
+}
+
+function getWorker(): Worker {
+  if (worker) return worker;
+  if (typeof window === "undefined" || typeof Worker === "undefined") throw new EnclaveError("enclave_unavailable");
+  let w: Worker;
+  try {
+    w = new Worker(new URL("./crypto.worker.ts", import.meta.url), { type: "module", name: "rout-crypto-enclave" });
+  } catch {
+    throw new EnclaveError("enclave_unavailable");
+  }
+  w.onmessage = (event: MessageEvent<EnclaveResponse>) => {
+    const msg = event.data;
+    const waiter = waiting.get(msg.id);
+    if (!waiter) return;
+    waiting.delete(msg.id);
+    clearTimeout(waiter.timer);
+    if (msg.ok) waiter.resolve(msg.result);
+    else waiter.reject(new EnclaveError(msg.code));
+  };
+  w.onerror = () => {
+    rejectAll("enclave_crashed");
+    w.terminate();
+    if (worker === w) worker = null;
+  };
+  worker = w;
+  return w;
+}
+
+export function callEnclave<K extends EnclaveOp>(op: K, args: EnclaveArgs<K>, transfer: Transferable[] = []): Promise<EnclaveResult<K>> {
+  return new Promise<EnclaveResult<K>>((resolve, reject) => {
+    let w: Worker;
+    try {
+      w = getWorker();
+    } catch (e) {
+      reject(e instanceof EnclaveError ? e : new EnclaveError("enclave_unavailable"));
+      return;
+    }
+    const id = ++seq;
+    const timer = setTimeout(() => {
+      waiting.delete(id);
+      reject(new EnclaveError("timeout"));
+    }, TIMEOUT_MS);
+    waiting.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
+    w.postMessage({ id, op, args } as EnclaveRequest, transfer);
+  });
+}
+
+const moved = (b?: Uint8Array): Transferable[] => (b ? [b.buffer as ArrayBuffer] : []);
+
+/** Typed façade. Uint8Array arguments are transferred: the caller's copy becomes empty. */
+export const enclave = {
+  vault: {
+    prepare: (secret: string) => callEnclave("vault.prepare", { secret }),
+    decrypt: (handle: string, vaultId: string, blob: string, expiresAt: string): Promise<VaultSummary> =>
+      callEnclave("vault.decrypt", { handle, vaultId, blob, expiresAt }),
+    reseal: (handle: string, userId: string): Promise<SealedForUser> => callEnclave("vault.reseal", { handle, userId }),
+    discard: (handle: string) => callEnclave("vault.discard", { handle }),
+  },
+  deviceKey: {
+    status: (userId: string) => callEnclave("deviceKey.status", { userId }),
+  },
+  masterKey: {
+    generate: () => callEnclave("masterKey.generate", {}),
+    commitPending: (handle: string, userId: string) => callEnclave("masterKey.commitPending", { handle, userId }),
+    discardPending: (handle: string) => callEnclave("masterKey.discardPending", { handle }),
+    unlock: (userId: string, mnemonic: string) => callEnclave("masterKey.unlock", { userId, mnemonic }),
+  },
+  data: {
+    /** UI → worker plaintext, worker → UI ciphertext (ready for the database). */
+    seal: (userId: string, aad: string, data: unknown): Promise<SealedForUser> => {
+      const plaintext = new TextEncoder().encode(JSON.stringify(data));
+      return callEnclave("data.seal", { userId, aad, plaintext }, moved(plaintext));
+    },
+    open: async <T = unknown>(userId: string, aad: string, blob: string): Promise<T> => {
+      const { plaintext } = await callEnclave("data.open", { userId, aad, blob });
+      try {
+        return JSON.parse(new TextDecoder().decode(plaintext)) as T;
+      } finally {
+        plaintext.fill(0);
+      }
+    },
+  },
+  ledger: {
+    generate: (prf?: Uint8Array): Promise<LedgerDraft> => callEnclave("ledger.generate", prf ? { prf } : {}, moved(prf)),
+    activate: (keyId: string) => callEnclave("ledger.activate", { keyId }),
+    discardPending: (keyId: string) => callEnclave("ledger.discardPending", { keyId }),
+    unlock: (keyId: string, envelope: PrivateEnvelope, material: { recoveryCode: string } | { prf: Uint8Array }) =>
+      callEnclave("ledger.unlock", { keyId, envelope, ...material }, "prf" in material ? moved(material.prf) : []),
+    decrypt: (keyId: string, items: { id: string; payload: string }[]) => callEnclave("ledger.decrypt", { keyId, items }),
+    lock: (keyId?: string) => callEnclave("ledger.lock", keyId ? { keyId } : {}),
+  },
+  hash: {
+    sha256Hex: (text: string) => callEnclave("hash.sha256Hex", { text }),
+  },
+  protocol: {
+    identity: (userId: string) => callEnclave("protocol.identity", { userId }),
+    /** UI → worker plaintext (transferred), worker → UI a signed, ciphertext-only event. */
+    sealEvent: (userId: string, at: { stream: string; seq: number; prev: string | null; kind: string; capId?: string }, data: unknown): Promise<SignedEvent> => {
+      const plaintext = new TextEncoder().encode(JSON.stringify(data));
+      return callEnclave("protocol.sealEvent", { userId, ...at, plaintext }, moved(plaintext));
+    },
+    signEvent: (userId: string, draft: EventDraft) => callEnclave("protocol.signEvent", { userId, draft }),
+    openEvent: async <T = unknown>(userId: string, event: SignedEvent): Promise<T> => {
+      const { plaintext } = await callEnclave("protocol.openEvent", { userId, event });
+      try {
+        return JSON.parse(new TextDecoder().decode(plaintext)) as T;
+      } finally {
+        plaintext.fill(0);
+      }
+    },
+    dpop: async (userId: string, method: string, url: string) => (await callEnclave("protocol.dpop", { userId, method, url })).proof,
+    delegate: (userId: string, grant: CapabilityGrant, parent?: Capability | null) => callEnclave("protocol.delegate", { userId, grant, parent: parent ?? null }),
+  },
+};

@@ -12,3 +12,10 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+# AI agents: machine-readable API description
+# Agent-Manifest: /.well-known/rout-agent.json
+# Universal AI discovery: stateless REST provisioning (zero-knowledge vault,
+# design-token schema, self-healing diagnostics). No WebSocket or MCP needed.
+AI-Manifest: /ai-manifest.json
+Allow: /ai-manifest.json

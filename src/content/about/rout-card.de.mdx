@@ -1,0 +1,39 @@
+---
+title: "Die ROUT Card"
+description: "Physische und digitale Karten mit getrennten öffentlichen und Berechtigungsebenen."
+category: "about"
+last_updated: "2026-11-04"
+ai_ready: true
+---
+
+# Die ROUT Card
+
+Dein Profil zum Mitnehmen: Metallkarte, Google-Wallet- oder Apple-Wallet-Pass und drehbare 3D-Karte. Die Ausgabe hängt vom eingerichteten Anbieter und der Kontoberechtigung ab.
+
+## Ein Design, drei Formate
+
+Die physische Karte zeigt öffentliche Markeninformationen, eine Kartennummer und einen gedruckten QR-Code. Der Wallet-Pass folgt dem öffentlichen Profil. Die 3D-Ansicht exportiert die öffentliche Vorderseite; private Berechtigungstoken dürfen niemals in PNGs erscheinen.
+
+## Drei getrennte Scan-Ebenen
+
+1. **Gedruckter QR-Code** öffnet den öffentlichen Kartenstatus unter `/v/…`. Er meldet niemanden an.
+2. **NFC-Handshake** nutzt kryptografische Prüfung mit einem kompatiblen Leser, getrennt vom gedruckten QR-Code.
+3. **Rotierender digitaler Token** ist nur für den Eigentümer verfügbar, wird beim Öffnen geprüft und ist einmal verwendbar.
+
+Ein öffentliches Bild kann bewusst veröffentlichte Informationen zeigen. Private Zugangscodes gehören nie in Bildmodule oder Presse-Downloads.
+
+## Kartennummer und Datenschutz
+
+Die Kartennummer ist eine schlüsselbasierte Einwegableitung, nicht die interne Konto-ID. Haupt- und Aliasbereiche bleiben getrennt. Eine stabile Seriennummer erhält gespeicherte Pässe bei einer Namensänderung.
+
+## Karte verloren
+
+Friere die Karte im Konto ein. Eingefrorene Karten müssen bei der Prüfung abgewiesen werden und erhalten keine neuen Live-Codes. Dies ersetzt keine Meldung eines kompromittierten Kontos oder notwendige Schlüsselrotation.
+
+## Google-Wallet-Bilder
+
+Die [öffentliche PNG-Sammlung](/press/wallet) enthält Logos, Hero-Bilder und Bildmodule. Persönliche Bilder verwenden nur öffentliche Karteninformationen. Die Ausgabe benötigt einen autorisierten Aussteller und ein Dienstkonto; Bilder allein aktivieren sie nicht.
+
+## Weiterlesen
+
+[Wallet-Pässe](/info/wallet), [Plattform](/about/platform), [Kryptografie](/safety/cryptography) und [Vorschaubilder](/press/previews).

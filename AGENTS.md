@@ -28,3 +28,9 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Imported ROUT application
+- Preserve the source TanStack routes, providers, assets, and MDX catalog so the original app remains compatible.
+- Preserve managed project metadata, generated integrations, and auth attachment when importing source so this project keeps its own identity.
+- Keep imported compiler options and MDX compilation while retaining the managed deployment target so source code compiles in this environment.
+- Never copy source credentials or apply external database scripts automatically; original accounts and services require explicit compatible configuration.

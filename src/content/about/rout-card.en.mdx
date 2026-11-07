@@ -1,0 +1,39 @@
+---
+title: "The ROUT Card"
+description: "Physical and digital cards with separate public and authorization layers."
+category: "about"
+last_updated: "2026-11-04"
+ai_ready: true
+---
+
+# The ROUT Card
+
+Your profile in a form you can carry: a metal card, a Google Wallet or Apple Wallet pass, and a rotatable 3D card. Issuance depends on the configured provider and account eligibility.
+
+## One design, three formats
+
+The physical card carries public branding, a card number and a printed QR. The Wallet pass follows the public profile design. The 3D viewer shares public front artwork; private authorization tokens must never appear in exported PNGs.
+
+## Three separate scan layers
+
+1. **Printed QR** opens the public card status at `/v/…`. It does not sign anyone in.
+2. **NFC handshake** uses cryptographic verification with a compatible reader. It is distinct from the printed QR.
+3. **Rotating digital token** is available only to the owner, checked when opened and single-use.
+
+A public image can reveal information the owner chose to publish. Never place private access codes in an image module or press download.
+
+## Card numbers and privacy
+
+Card numbers use a keyed, one-way derivation rather than the internal account ID. Root and alias spaces are separated. A stable pass serial prevents a handle change from abandoning a saved pass.
+
+## Lost card
+
+Freeze the card in your account. Frozen cards must be rejected by verification and receive no new live code. Freezing is not a substitute for reporting a compromised account or rotating affected credentials.
+
+## Google Wallet artwork
+
+The [public PNG collection](/press/wallet) includes logos, hero artwork and image modules. Personalized hero rendering uses public card information only. Adding a pass requires an authorized issuer and service account; artwork alone does not activate issuance.
+
+## Further reading
+
+[Wallet passes](/info/wallet), [the platform](/about/platform), [cryptography](/safety/cryptography), and [share previews](/press/previews).

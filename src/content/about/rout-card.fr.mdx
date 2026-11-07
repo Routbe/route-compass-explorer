@@ -1,0 +1,39 @@
+---
+title: "La ROUT Card"
+description: "Cartes physiques et numériques aux couches publiques et d’autorisation séparées."
+category: "about"
+last_updated: "2026-11-04"
+ai_ready: true
+---
+
+# La ROUT Card
+
+Votre profil à emporter : une carte métallique, un pass Google Wallet ou Apple Wallet et une carte 3D rotative. L’émission dépend du fournisseur configuré et de l’éligibilité du compte.
+
+## Un design, trois supports
+
+La carte physique porte la marque publique, un numéro et un QR imprimé. Le pass Wallet suit le design du profil public. La vue 3D partage la face publique ; aucun jeton privé d’autorisation ne doit apparaître dans les PNG exportés.
+
+## Trois couches de scan distinctes
+
+1. **QR imprimé** : ouvre le statut public de la carte à `/v/…`. Il ne connecte personne.
+2. **Échange NFC** : utilise une vérification cryptographique avec un lecteur compatible, distincte du QR imprimé.
+3. **Jeton numérique rotatif** : réservé au propriétaire, vérifié à l’ouverture et utilisable une seule fois.
+
+Une image publique peut montrer les informations volontairement publiées. Ne placez jamais de code d’accès privé dans un module d’image ou un fichier presse.
+
+## Numéro et confidentialité
+
+Le numéro résulte d’une dérivation à sens unique avec clé, et non de l’ID interne du compte. Les espaces principal et alias restent séparés. Un numéro de série stable préserve le pass lors d’un changement de nom.
+
+## Carte perdue
+
+Gelez la carte dans votre compte. Une carte gelée doit être refusée à la vérification et ne reçoit plus de code actif. Le gel ne remplace pas le signalement d’un compte compromis ou la rotation des identifiants concernés.
+
+## Visuels Google Wallet
+
+La [collection publique de PNG](/press/wallet) comprend logos, image principale et modules. L’image personnalisée utilise uniquement les informations publiques. Un émetteur et un compte de service autorisés sont nécessaires ; les images seules n’activent pas l’émission.
+
+## Pour aller plus loin
+
+[Pass Wallet](/info/wallet), [plateforme](/about/platform), [cryptographie](/safety/cryptography) et [aperçus](/press/previews).
