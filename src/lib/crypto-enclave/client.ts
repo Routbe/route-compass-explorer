@@ -109,6 +109,10 @@ function getWorker(): Worker {
 }
 
 export function callEnclave<K extends EnclaveOp>(op: K, args: EnclaveArgs<K>, transfer: Transferable[] = []): Promise<EnclaveResult<K>> {
+  // Disposal must never recreate a worker after a crash, timeout or logout.
+  if (!worker && (op === "vault.discard" || op === "masterKey.discardPending" || op === "ledger.discardPending" || op === "ledger.lock")) {
+    return Promise.resolve(null as EnclaveResult<K>);
+  }
   return new Promise<EnclaveResult<K>>((resolve, reject) => {
     let w: Worker;
     try {

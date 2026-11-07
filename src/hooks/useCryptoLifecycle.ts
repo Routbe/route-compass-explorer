@@ -5,16 +5,20 @@ import { captureEnclaveScope, EnclaveError } from "@/lib/crypto-enclave/client";
 export function useCryptoLifecycle() {
   const generation = useRef(0);
   const mounted = useRef(true);
+  const cancellation = useRef<AbortController | null>(null);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; generation.current++; };
+    return () => { mounted.current = false; generation.current++; cancellation.current?.abort(); cancellation.current = null; };
   }, []);
-  const invalidate = useCallback(() => { generation.current++; }, []);
+  const invalidate = useCallback(() => { generation.current++; cancellation.current?.abort(); cancellation.current = null; }, []);
   const capture = useCallback(() => {
     const local = generation.current;
     const scope = captureEnclaveScope();
+    if (!cancellation.current) cancellation.current = new AbortController();
+    const localSignal = cancellation.current.signal;
     return {
-      signal: scope.signal,
+      signal: AbortSignal.any([scope.signal, localSignal]),
+      isUiCurrent: () => mounted.current && local === generation.current,
       assertCurrent: () => {
         scope.assertCurrent();
         if (!mounted.current || local !== generation.current) throw new EnclaveError("enclave_crashed");

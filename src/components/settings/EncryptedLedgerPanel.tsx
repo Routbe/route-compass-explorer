@@ -62,14 +62,16 @@ function EncryptedLedgerSession() {
   async function run(task: () => Promise<void>) {
     const scope = capture();
     setBusy(true); setError(null);
-    try { await task(); } catch (e) { if (scope.isCurrent()) setError(enclaveMessage(e)); } finally { if (scope.isCurrent()) setBusy(false); }
+    try { await task(); } catch (e) { if (scope.isUiCurrent()) setError(enclaveMessage(e)); } finally { if (scope.isUiCurrent()) setBusy(false); }
   }
   async function prepare() {
     const scope = capture();
     setPrfCredential(null);
     if (usePrf) {
       // React receives only the draft and public credential ID, never PRF key bytes.
-      const result = await (await import("@/lib/ledger/prf")).generateLedgerWithPasskey();
+      const prf = await import("@/lib/ledger/prf");
+      scope.assertCurrent();
+      const result = await prf.generateLedgerWithPasskey(scope);
       if (!result) throw new Error("Deze passkey ondersteunt geen PRF. Kies herstelcode of een geschikte passkey.");
       if (!scope.isCurrent()) { void enclave.ledger.discardPending(result.draft.keyId).catch(() => undefined); return; }
       setPrfCredential(result.credentialId);
@@ -105,7 +107,9 @@ function EncryptedLedgerSession() {
     const envelope = envelopes.find((e) => e.source === (prf ? "prf" : "recovery"));
     if (!envelope) throw new Error("Geen geschikte sleutelenvelop.");
     if (prf) {
-      const result = await (await import("@/lib/ledger/prf")).unlockLedgerWithPasskey(envelopeKey.key_id, envelope, envelope.credentialId);
+      const prf = await import("@/lib/ledger/prf");
+      scope.assertCurrent();
+      const result = await prf.unlockLedgerWithPasskey(envelopeKey.key_id, envelope, envelope.credentialId, scope);
       if (!result) throw new Error("Passkey PRF niet beschikbaar.");
     } else {
       await enclave.ledger.unlock(envelopeKey.key_id, envelope, { recoveryCode: recovery.trim() });

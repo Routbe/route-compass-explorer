@@ -111,7 +111,7 @@ function VaultClaimSession({ vaultId, secret, onCancel }: Props) {
       setPhrase("");
       setDeviceKeyId(keyId);
     } catch {
-      if (!scope.isCurrent()) return;
+      if (!scope.isUiCurrent()) return;
       setError("Ongeldige Master Key. Controleer de 24 woorden.");
     }
   }
@@ -126,7 +126,7 @@ function VaultClaimSession({ vaultId, secret, onCancel }: Props) {
       setFresh(null);
       setDeviceKeyId(keyId);
     } catch {
-      if (!scope.isCurrent()) return;
+      if (!scope.isUiCurrent()) return;
       setFresh(null);
       setError("Deze Master Key is verlopen. Maak een nieuwe aan.");
     }
@@ -148,7 +148,7 @@ function VaultClaimSession({ vaultId, secret, onCancel }: Props) {
       setFresh(generated);
       setWroteDown(false);
     } catch {
-      if (!scope.isCurrent()) return;
+      if (!scope.isUiCurrent()) return;
       setError("Kon geen Master Key maken. Probeer opnieuw.");
     } finally {
       operation.current = false;
@@ -196,7 +196,7 @@ function VaultClaimSession({ vaultId, secret, onCancel }: Props) {
       setOpened(null);
       setDone({ slug: body.slug });
     } catch (e) {
-      if (!scope.isCurrent()) return;
+      if (!scope.isUiCurrent()) return;
       setError(
         e instanceof EnclaveError && e.code === "no_device_key" ? "Ontgrendel eerst je Master Key."
         : e instanceof EnclaveError && e.code === "unknown_handle" ? "De kluis is verlopen in deze browser. Open de link opnieuw."
@@ -204,7 +204,7 @@ function VaultClaimSession({ vaultId, secret, onCancel }: Props) {
       );
     } finally {
       operation.current = false;
-      if (scope.isCurrent()) setBusy(false);
+      if (scope.isUiCurrent()) setBusy(false);
     }
   }
 
