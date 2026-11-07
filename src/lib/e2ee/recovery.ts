@@ -2,10 +2,16 @@
 import { entropyToMnemonic, mnemonicToEntropy, validateMnemonic } from "@scure/bip39";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 import { b64u } from "./crypto";
+import { wipe } from "@/lib/crypto/wipe";
 
 export function newMasterKey(): { key: Uint8Array; mnemonic: string } {
   const key = crypto.getRandomValues(new Uint8Array(32)); // 256 bits → 24 words
-  return { key, mnemonic: entropyToMnemonic(key, wordlist) };
+  try {
+    return { key, mnemonic: entropyToMnemonic(key, wordlist) };
+  } catch (error) {
+    wipe(key);
+    throw error;
+  }
 }
 
 export function masterKeyFromMnemonic(mnemonic: string): Uint8Array {
@@ -34,33 +40,51 @@ const div = (a: number, b: number) => (a ? EXP[(LOG[a] + 255 - LOG[b]) % 255] : 
 export function splitSecret(secret: Uint8Array, n = 3, k = 2): string[] {
   if (k < 2 || n < k || n > 255) throw new Error("Invalid threshold");
   const coeffs = crypto.getRandomValues(new Uint8Array(secret.length * (k - 1)));
-  return Array.from({ length: n }, (_, idx) => {
-    const x = idx + 1;
-    const y = secret.map((s, i) => {
-      let acc = 0;
-      for (let j = k - 2; j >= 0; j--) acc = mul(acc, x) ^ coeffs[i * (k - 1) + j];
-      return mul(acc, x) ^ s;
+  try {
+    return Array.from({ length: n }, (_, idx) => {
+      const x = idx + 1;
+      const y = secret.map((s, i) => {
+        let acc = 0;
+        for (let j = k - 2; j >= 0; j--) acc = mul(acc, x) ^ coeffs[i * (k - 1) + j];
+        return mul(acc, x) ^ s;
+      });
+      try {
+        return `${x}.${b64u.encode(y)}`;
+      } finally {
+        wipe(y);
+      }
     });
-    return `${x}.${b64u.encode(y)}`;
-  });
+  } finally {
+    wipe(coeffs);
+  }
 }
 
 export function combineShards(shards: string[]): Uint8Array {
-  const pts = shards.map((s) => {
-    const [x, y] = s.split(".");
-    return { x: Number(x), y: b64u.decode(y) };
-  });
-  if (new Set(pts.map((p) => p.x)).size !== pts.length) throw new Error("Duplicate shard");
-  const len = pts[0].y.length;
-  const out = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    let acc = 0;
-    for (const a of pts) {
-      let num = 1, den = 1;
-      for (const b of pts) if (a !== b) { num = mul(num, b.x); den = mul(den, a.x ^ b.x); }
-      acc ^= mul(a.y[i], div(num, den));
+  const pts: { x: number; y: Uint8Array }[] = [];
+  let out: Uint8Array | null = null;
+  try {
+    for (const shard of shards) {
+      const [x, y] = shard.split(".");
+      pts.push({ x: Number(x), y: b64u.decode(y) });
     }
-    out[i] = acc;
+    if (new Set(pts.map((p) => p.x)).size !== pts.length) throw new Error("Duplicate shard");
+    const first = pts[0];
+    if (!first || pts.some((p) => !Number.isInteger(p.x) || p.x < 1 || p.x > 255 || p.y.length !== first.y.length)) throw new Error("Invalid shard");
+    out = new Uint8Array(first.y.length);
+    for (let i = 0; i < out.length; i++) {
+      let acc = 0;
+      for (const a of pts) {
+        let num = 1, den = 1;
+        for (const b of pts) if (a !== b) { num = mul(num, b.x); den = mul(den, a.x ^ b.x); }
+        acc ^= mul(a.y[i], div(num, den));
+      }
+      out[i] = acc;
+    }
+    return out; // the caller owns the reconstructed key and its cleanup
+  } catch (error) {
+    wipe(out);
+    throw error;
+  } finally {
+    for (const point of pts) wipe(point.y);
   }
-  return out;
 }
