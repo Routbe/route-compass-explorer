@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useCryptoLifecycle } from "@/hooks/useCryptoLifecycle";
 import { useServerFn } from "@tanstack/react-start";
 import { LockKeyhole, ShieldCheck, RefreshCw, Fingerprint } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +33,12 @@ function enclaveMessage(e: unknown): string {
  * recovery code shown to the member and the plaintext it chose to display.
  */
 export function EncryptedLedgerPanel() {
+  const { user } = useAuth();
+  return user ? <EncryptedLedgerSession key={user.id} /> : null;
+}
+
+function EncryptedLedgerSession() {
+  const { capture, invalidate } = useCryptoLifecycle();
   const fetchKeys = useServerFn(getLedgerKeys), list = useServerFn(listEncryptedLedger), save = useServerFn(saveLedgerKeys), audit = useServerFn(getDisclosureAudit);
   const [keys, setKeys] = useState<KeyRow[]>([]), [pending, setPending] = useState<LedgerDraft | null>(null);
   const [prfCredential, setPrfCredential] = useState<string | null>(null);
@@ -42,7 +50,9 @@ export function EncryptedLedgerPanel() {
   const [integrity, setIntegrity] = useState<Awaited<ReturnType<typeof getDisclosureAudit>> | null>(null);
   const active = keys.find((k) => !k.retired_at);
   async function refresh() {
+    const scope = capture();
     const [k, logs, verified] = await Promise.all([fetchKeys(), list({ data: {} }), audit()]);
+    scope.assertCurrent();
     setKeys(k as unknown as KeyRow[]); setRows(logs as unknown as LogRow[]); setIntegrity(verified);
     return logs as unknown as LogRow[];
   }
@@ -50,34 +60,45 @@ export function EncryptedLedgerPanel() {
   // Leaving the page locks the ledger: the enclave drops its private keys.
   useEffect(() => () => { void enclave.ledger.lock().catch(() => undefined); }, []);
   async function run(task: () => Promise<void>) {
+    const scope = capture();
     setBusy(true); setError(null);
-    try { await task(); } catch (e) { setError(enclaveMessage(e)); } finally { setBusy(false); }
+    try { await task(); } catch (e) { if (scope.isCurrent()) setError(enclaveMessage(e)); } finally { if (scope.isCurrent()) setBusy(false); }
   }
   async function prepare() {
+    const scope = capture();
     setPrfCredential(null);
     if (usePrf) {
       // React receives only the draft and public credential ID, never PRF key bytes.
       const result = await (await import("@/lib/ledger/prf")).generateLedgerWithPasskey();
       if (!result) throw new Error("Deze passkey ondersteunt geen PRF. Kies herstelcode of een geschikte passkey.");
+      if (!scope.isCurrent()) { void enclave.ledger.discardPending(result.draft.keyId).catch(() => undefined); return; }
       setPrfCredential(result.credentialId);
       setPending(result.draft);
     } else {
-      setPending(await enclave.ledger.generate());
+      const draft = await enclave.ledger.generate();
+      if (!scope.isCurrent()) { void enclave.ledger.discardPending(draft.keyId).catch(() => undefined); return; }
+      setPending(draft);
     }
     setAcknowledged(false);
   }
   async function activate() {
     if (!pending || !acknowledged) return;
+    const scope = capture();
     const envelopes = pending.envelopes.map((e) => e.source === "prf" ? { ...e, credentialId: prfCredential ?? undefined } : e);
     await save({ data: { publicKey: pending.publicKey as LedgerPublicKey, envelopes, expectedKeyId: active?.key_id ?? null } });
+    scope.assertCurrent();
     await enclave.ledger.activate(pending.keyId);
+    scope.assertCurrent();
     setUnlockedKeyId(pending.keyId); setPending(null); setRecovery(""); setDecoded({}); await refresh();
   }
   function cancelPending() {
+    invalidate();
+    setBusy(false);
     if (pending) void enclave.ledger.discardPending(pending.keyId).catch(() => undefined);
     setPending(null);
   }
   async function unlock(prf: boolean) {
+    const scope = capture();
     const envelopeKey = keys.find((k) => prf ? k.key_id === active?.key_id : k.key_id === (selectedKeyId || active?.key_id));
     if (!envelopeKey) throw new Error("Geen sleutel beschikbaar.");
     const envelopes = envelopeKey.encrypted_ledger_private_key;
@@ -89,23 +110,31 @@ export function EncryptedLedgerPanel() {
     } else {
       await enclave.ledger.unlock(envelopeKey.key_id, envelope, { recoveryCode: recovery.trim() });
     }
+    scope.assertCurrent();
     setUnlockedKeyId(envelopeKey.key_id); setRecovery("");
     const items = rows.filter((r) => r.key_id === envelopeKey.key_id).map((r) => ({ id: r.id, payload: r.encrypted_payload }));
-    setDecoded(items.length ? await enclave.ledger.decrypt(envelopeKey.key_id, items) : {});
+    const decoded = items.length ? await enclave.ledger.decrypt(envelopeKey.key_id, items) : {};
+    scope.assertCurrent();
+    setDecoded(decoded);
   }
   async function loadMore() {
+    const scope = capture();
     const last = rows.at(-1); if (!last) return;
     const extra = await list({ data: { cursor: { id: last.id, createdAt: last.created_at } } }) as unknown as LogRow[];
+    scope.assertCurrent();
     setRows((current) => [...current, ...extra]);
     if (unlockedKeyId) {
       const items = extra.filter((r) => r.key_id === unlockedKeyId).map((r) => ({ id: r.id, payload: r.encrypted_payload }));
       if (items.length) {
         const more = await enclave.ledger.decrypt(unlockedKeyId, items);
+        scope.assertCurrent();
         setDecoded((current) => ({ ...current, ...more }));
       }
     }
   }
   function lock() {
+    invalidate();
+    setBusy(false);
     void enclave.ledger.lock().catch(() => undefined);
     setUnlockedKeyId(null); setDecoded({});
   }
